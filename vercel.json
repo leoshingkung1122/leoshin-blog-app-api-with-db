@@ -1,12 +1,6 @@
 
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/profiles.js",
-      "use": "@vercel/node"
-    }
-  ],
   "routes": [
     {
       "src": "/profiles",
