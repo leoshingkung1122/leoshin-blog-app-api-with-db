@@ -25,6 +25,12 @@ app.get("/profiles", (req: Request, res: Response<ApiResponse>) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`Server is running at ${port}`);
-});
+// Export the app for Vercel
+export default app;
+
+// Only start the server if running locally
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(port, () => {
+    console.log(`Server is running at ${port}`);
+  });
+}
