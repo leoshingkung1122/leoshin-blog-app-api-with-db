@@ -1,11 +1,8 @@
 import { Request, Response, NextFunction } from "express";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabase } from "../utils/supabase";
 import connectionPool from "../utils/db";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL || "",
-  process.env.SUPABASE_ANON_KEY || ""
-);
+// Supabase will be obtained lazily per request
 
 // Middleware ตรวจสอบ JWT token และสิทธิ์ Admin
 const protectAdmin = async (req: Request, res: Response, next: NextFunction) => {
@@ -17,6 +14,7 @@ const protectAdmin = async (req: Request, res: Response, next: NextFunction) => 
 
   try {
     // ใช้ Supabase ดึงข้อมูลผู้ใช้จาก token
+    const supabase = getSupabase();
     const { data, error } = await supabase.auth.getUser(token);
 
     if (error || !data.user) {

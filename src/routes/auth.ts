@@ -1,12 +1,8 @@
 import { Router, Request, Response } from "express";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabase } from "../utils/supabase";
 import connectionPool from "../utils/db";
 import protectUser from "../middleware/protectUser";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL || "",
-  process.env.SUPABASE_ANON_KEY || ""
-);
 const authRouter = Router();
 
 // จะเพิ่ม routes ต่างๆ ที่นี่
@@ -31,6 +27,7 @@ authRouter.post("/register", async (req: Request, res: Response) => {
       }
   
       // สร้างผู้ใช้ใหม่ผ่าน Supabase Auth
+      const supabase = getSupabase();
       const { data, error: supabaseError } = await supabase.auth.signUp({
         email,
         password,
@@ -79,6 +76,7 @@ authRouter.post("/register", async (req: Request, res: Response) => {
     const { email, password } = req.body;
   
     try {
+      const supabase = getSupabase();
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -120,6 +118,7 @@ authRouter.post("/register", async (req: Request, res: Response) => {
   
     try {
       // ดึงข้อมูลผู้ใช้จาก Supabase
+      const supabase = getSupabase();
       const { data, error } = await supabase.auth.getUser(token);
       if (error) {
         return res.status(401).json({ error: "Unauthorized or token expired" });

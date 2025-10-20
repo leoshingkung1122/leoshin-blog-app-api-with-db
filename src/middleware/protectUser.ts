@@ -1,10 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || "",
-  process.env.SUPABASE_ANON_KEY || ""
-);
+import { getSupabase } from "../utils/supabase";
 
 // Middleware ตรวจสอบ JWT token และดึง user_id
 const protectUser = async (req: Request, res: Response, next: NextFunction) => {
@@ -15,6 +10,7 @@ const protectUser = async (req: Request, res: Response, next: NextFunction) => {
   }
 
   try {
+    const supabase = getSupabase();
     // ใช้ Supabase ตรวจสอบ token และดึงข้อมูลผู้ใช้
     const { data, error } = await supabase.auth.getUser(token);
 
