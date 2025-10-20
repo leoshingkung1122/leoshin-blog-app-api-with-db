@@ -3,6 +3,7 @@ import cors from "cors";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import postsRouter from "./routes/posts";
 import profilesRouter from "./routes/profiles";
+import authRouter from "./routes/auth";
 
 const app = express();
 const port: number = parseInt(process.env.PORT || "4001", 10);
@@ -13,6 +14,7 @@ app.use(express.json());
 // Routes
 app.use("/posts", postsRouter);
 app.use("/profiles", profilesRouter);
+app.use("/auth", authRouter);
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);

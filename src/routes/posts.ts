@@ -2,12 +2,13 @@ import { Router, Request, Response } from "express";
 import connectionPool from "../utils/db";
 import { asyncHandler } from "../middleware/errorHandler";
 import { DatabaseError, NotFoundError, ValidationError } from "../utils/errors";
+import protectAdmin from "../middleware/protectAdmin";
 import validatePostData from "../middleware/postValidation";
 
 const router = Router();
 
 // POST /posts - Create a new post
-router.post("/", validatePostData, asyncHandler(async (req: Request, res: Response) => {
+router.post("/", protectAdmin, validatePostData, asyncHandler(async (req: Request, res: Response) => {
   const newPost = req.body;
 
   const query = `insert into posts (title, image, category_id, description, content, status_id)
@@ -174,7 +175,7 @@ router.get("/:postId", asyncHandler(async (req: Request, res: Response) => {
 }));
 
 // PUT /posts/:postId - Update a specific post
-router.put("/:postId", validatePostData, asyncHandler(async (req: Request, res: Response) => {
+router.put("/:postId", protectAdmin, validatePostData, asyncHandler(async (req: Request, res: Response) => {
   const postIdFromClient = req.params.postId;
   const updatedPost = { ...req.body, date: new Date() };
 
@@ -226,7 +227,7 @@ router.put("/:postId", validatePostData, asyncHandler(async (req: Request, res: 
 }));
 
 // DELETE /posts/:postId - Delete a specific post
-router.delete("/:postId", asyncHandler(async (req: Request, res: Response) => {
+router.delete("/:postId", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
   const postIdFromClient = req.params.postId;
 
   // Validate postId parameter
