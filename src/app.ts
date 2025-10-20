@@ -8,8 +8,16 @@ import authRouter from "./routes/auth";
 const app = express();
 const port: number = parseInt(process.env.PORT || "4001", 10);
 
-app.use(cors());
+app.use(cors({
+  origin: ['https://leoshin-blog-app.vercel.app', 'http://localhost:5173', 'http://localhost:3000'],
+  credentials: true
+}));
 app.use(express.json());
+
+// Root route for testing
+app.get("/", (req, res) => {
+  res.json({ message: "LeoShin Blog API is running!", status: "success" });
+});
 
 // Routes
 app.use("/posts", postsRouter);
