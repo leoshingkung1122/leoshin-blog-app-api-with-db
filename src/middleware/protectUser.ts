@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { getSupabase } from "../utils/supabase";
+import { getSupabase, getSupabaseWithAuth } from "../utils/supabase";
 
 // Middleware ตรวจสอบ JWT token และดึง user_id
 const protectUser = async (req: Request, res: Response, next: NextFunction) => {
@@ -10,16 +10,17 @@ const protectUser = async (req: Request, res: Response, next: NextFunction) => {
   }
 
   try {
-    const supabase = getSupabase();
-    // ใช้ Supabase ตรวจสอบ token และดึงข้อมูลผู้ใช้
-    const { data, error } = await supabase.auth.getUser(token);
+    // ใช้ Supabase client ที่มี auth context สำหรับตรวจสอบ token
+    const supabase = getSupabaseWithAuth(token);
+    const { data, error } = await supabase.auth.getUser();
 
     if (error || !data.user) {
       return res.status(401).json({ error: "Unauthorized: Invalid token" });
     }
 
-    // แนบข้อมูลผู้ใช้เข้ากับ request object
+    // แนบข้อมูลผู้ใช้และ token เข้ากับ request object
     (req as any).user = { ...data.user };
+    (req as any).accessToken = token;
 
     // ดำเนินการต่อไปยัง middleware หรือ route handler ถัดไป
     return next();

@@ -1,6 +1,5 @@
 import { Router, Request, Response } from "express";
 import { getSupabase } from "../utils/supabase";
-import connectionPool from "../utils/db";
 import protectUser from "../middleware/protectUser";
 
 const authRouter = Router();
@@ -12,22 +11,17 @@ authRouter.post("/register", async (req: Request, res: Response) => {
   
     try {
       // ตรวจสอบว่า username มีในฐานข้อมูลหรือไม่
-      const usernameCheckQuery = `
-                                  SELECT * FROM users 
-                                  WHERE username = $1
-                                 `;
-      const usernameCheckValues = [username];
-      const { rows: existingUser } = await connectionPool.query(
-        usernameCheckQuery,
-        usernameCheckValues
-      );
+      const supabase = getSupabase();
+      const { data: existingUsers } = await supabase
+        .from("users")
+        .select("*")
+        .eq("username", username);
   
-      if (existingUser.length > 0) {
+      if (existingUsers && existingUsers.length > 0) {
         return res.status(400).json({ error: "This username is already taken" });
       }
   
       // สร้างผู้ใช้ใหม่ผ่าน Supabase Auth
-      const supabase = getSupabase();
       const { data, error: supabaseError } = await supabase.auth.signUp({
         email,
         password,
@@ -54,18 +48,24 @@ authRouter.post("/register", async (req: Request, res: Response) => {
       const supabaseUserId = data.user.id;
   
       // เพิ่มข้อมูลผู้ใช้ในฐานข้อมูล PostgreSQL
-      const query = `
-          INSERT INTO users (id, username, name, role)
-          VALUES ($1, $2, $3, $4)
-          RETURNING *;
-        `;
-  
-      const values = [supabaseUserId, username, name, "user"];
-  
-      const { rows } = await connectionPool.query(query, values);
+      const { data: newUser, error: insertError } = await supabase
+        .from("users")
+        .insert({
+          id: supabaseUserId,
+          username,
+          name,
+          role: "user"
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        return res.status(500).json({ error: "Failed to create user profile" });
+      }
+
       return res.status(201).json({
         message: "User created successfully",
-        user: rows[0],
+        user: newUser,
       });
     } catch (error) {
       return res.status(500).json({ error: "An error occurred during registration" });
@@ -110,45 +110,29 @@ authRouter.post("/register", async (req: Request, res: Response) => {
   });
 
   authRouter.get("/get-user", protectUser, async (req: Request, res: Response) => {
-    const token = req.headers.authorization?.split(" ")[1];
-  
-    if (!token) {
-      return res.status(401).json({ error: "Unauthorized: Token missing" });
-    }
-  
     try {
-      // ดึงข้อมูลผู้ใช้จาก Supabase
-      const supabase = getSupabase();
-      const { data, error } = await supabase.auth.getUser(token);
-      if (error) {
-        return res.status(401).json({ error: "Unauthorized or token expired" });
-      }
+      // ใช้ข้อมูลที่ middleware ได้แนบมาแล้ว
+      const user = (req as any).user;
+      const accessToken = (req as any).accessToken;
 
-      // ตรวจสอบว่า data.user มีอยู่จริง
-      if (!data.user) {
-        return res.status(401).json({ error: "User not found" });
-      }
-  
-      const supabaseUserId = data.user.id;
-      const query = `
-                      SELECT * FROM users 
-                      WHERE id = $1
-                    `;
-      const values = [supabaseUserId];
-      const { rows } = await connectionPool.query(query, values);
+      // ใช้ Supabase RLS helper สำหรับดึงข้อมูลผู้ใช้
+      const { createSupabaseRlsHelper } = await import("../utils/supabaseRls");
+      const supabaseRls = createSupabaseRlsHelper(accessToken);
+      
+      const users = await supabaseRls.select("users", "*", { id: user.id });
 
       // ตรวจสอบว่า rows มีข้อมูล
-      if (!rows.length) {
+      if (!users || users.length === 0) {
         return res.status(404).json({ error: "User data not found" });
       }
-  
+
       return res.status(200).json({
-        id: data.user.id,
-        email: data.user.email,
-        username: rows[0].username,
-        name: rows[0].name,
-        role: rows[0].role,
-        profilePic: rows[0].profile_pic,
+        id: user.id,
+        email: user.email,
+        username: (users[0] as any).username,
+        name: (users[0] as any).name,
+        role: (users[0] as any).role,
+        profilePic: (users[0] as any).profile_pic,
       });
     } catch (error) {
       return res.status(500).json({ error: "Internal server error" });

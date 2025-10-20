@@ -1,8 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import { getSupabase } from "../utils/supabase";
-import connectionPool from "../utils/db";
-
-// Supabase will be obtained lazily per request
+import { getSupabaseWithAuth } from "../utils/supabase";
+import { createSupabaseRlsHelper } from "../utils/supabaseRls";
 
 // Middleware ตรวจสอบ JWT token และสิทธิ์ Admin
 const protectAdmin = async (req: Request, res: Response, next: NextFunction) => {
@@ -13,9 +11,9 @@ const protectAdmin = async (req: Request, res: Response, next: NextFunction) => 
   }
 
   try {
-    // ใช้ Supabase ดึงข้อมูลผู้ใช้จาก token
-    const supabase = getSupabase();
-    const { data, error } = await supabase.auth.getUser(token);
+    // ใช้ Supabase client ที่มี auth context สำหรับตรวจสอบ token
+    const supabase = getSupabaseWithAuth(token);
+    const { data, error } = await supabase.auth.getUser();
 
     if (error || !data.user) {
       return res.status(401).json({ error: "Unauthorized: Invalid token" });
@@ -24,20 +22,17 @@ const protectAdmin = async (req: Request, res: Response, next: NextFunction) => 
     // ดึง user ID จากข้อมูลผู้ใช้ Supabase
     const supabaseUserId = data.user.id;
 
-    // ดึงข้อมูล role ของผู้ใช้จากฐานข้อมูล PostgreSQL
-    const query = `
-                    SELECT role FROM users 
-                    WHERE id = $1
-                  `;
-    const values = [supabaseUserId];
-    const { rows } = await connectionPool.query(query, values);
+    // ใช้ Supabase RLS helper สำหรับดึงข้อมูล role
+    const supabaseRls = createSupabaseRlsHelper(token);
+    const users = await supabaseRls.select("users", "role", { id: supabaseUserId });
 
-    if (!rows.length) {
+    if (!users || users.length === 0) {
       return res.status(404).json({ error: "User role not found" });
     }
 
-    // แนบข้อมูลผู้ใช้พร้อม role เข้ากับ request object
-    (req as any).user = { ...data.user, role: rows[0].role };
+    // แนบข้อมูลผู้ใช้พร้อม role และ token เข้ากับ request object
+    (req as any).user = { ...data.user, role: (users[0] as any).role };
+    (req as any).accessToken = token;
 
     // ตรวจสอบว่าผู้ใช้เป็น admin หรือไม่
     if ((req as any).user.role !== "admin") {
