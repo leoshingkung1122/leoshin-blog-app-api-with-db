@@ -61,10 +61,10 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
       .order("date", { ascending: false })
       .range(offset, offset + safeLimit - 1);
 
-    // เพิ่ม filters ถ้ามี
-    if (category) {
-      supabaseQuery = supabaseQuery.ilike("categories.name", `%${category}%`);
-    }
+    // เพิ่ม filters ถ้ามี - category filter จะทำใน post-processing
+    // if (category) {
+    //   supabaseQuery = supabaseQuery.ilike("categories.name", `%${category}%`);
+    // }
 
     if (keyword) {
       supabaseQuery = supabaseQuery.or(`title.ilike.%${keyword}%,description.ilike.%${keyword}%,content.ilike.%${keyword}%`);
@@ -76,13 +76,21 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
       throw new DatabaseError("Failed to fetch posts");
     }
 
+    // Filter by category if needed (post-processing)
+    let filteredPosts = posts || [];
+    if (category) {
+      filteredPosts = filteredPosts.filter((post: any) => 
+        post.categories?.name?.toLowerCase().includes(category.toLowerCase())
+      );
+    }
+
     const results: any = {
       success: true,
       totalPosts: 0, // จะคำนวณใหม่ด้านล่าง
       totalPages: 0,
       currentPage: safePage,
       limit: safeLimit,
-      posts: posts || [],
+      posts: filteredPosts,
     };
 
     // นับจำนวน posts ทั้งหมดด้วย Supabase
@@ -91,9 +99,9 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
       .select("id", { count: "exact" })
       .eq("status_id", 2);
 
-    if (category) {
-      countQuery = countQuery.ilike("categories.name", `%${category}%`);
-    }
+    // if (category) {
+    //   countQuery = countQuery.ilike("categories.name", `%${category}%`);
+    // }
 
     if (keyword) {
       countQuery = countQuery.or(`title.ilike.%${keyword}%,description.ilike.%${keyword}%,content.ilike.%${keyword}%`);
