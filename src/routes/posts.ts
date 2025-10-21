@@ -52,11 +52,7 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
   try {
     let supabaseQuery = supabase
       .from("posts")
-      .select(`
-        *,
-        categories(name),
-        statuses(status)
-      `)
+      .select("*")
       .eq("status_id", 2) // published posts only
       .order("date", { ascending: false })
       .range(offset, offset + safeLimit - 1);
@@ -76,13 +72,8 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
       throw new DatabaseError("Failed to fetch posts");
     }
 
-    // Filter by category if needed (post-processing)
+    // For now, we'll skip category filtering since we're not joining tables
     let filteredPosts = posts || [];
-    if (category) {
-      filteredPosts = filteredPosts.filter((post: any) => 
-        post.categories?.name?.toLowerCase().includes(category.toLowerCase())
-      );
-    }
 
     const results: any = {
       success: true,
@@ -143,11 +134,7 @@ router.get("/:postId", asyncHandler(async (req: Request, res: Response) => {
   try {
     const { data: posts, error } = await supabase
       .from("posts")
-      .select(`
-        *,
-        categories(name),
-        statuses(status)
-      `)
+      .select("*")
       .eq("id", postIdFromClient)
       .single();
 
@@ -221,11 +208,7 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
   const supabaseRls = createSupabaseRlsHelper(accessToken);
 
   try {
-    let query = `
-      *,
-      categories(name),
-      statuses(status)
-    `;
+    let query = "*";
 
     // Build filter conditions
     let filters: any = {};
@@ -266,13 +249,8 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
       throw new DatabaseError("Failed to fetch posts");
     }
 
-    // Filter by category if needed (post-processing since we need to filter by category name)
+    // For now, skip category filtering
     let filteredPosts = posts || [];
-    if (category) {
-      filteredPosts = filteredPosts.filter((post: any) => 
-        post.categories?.name?.toLowerCase().includes(category.toLowerCase())
-      );
-    }
 
     // Get total count for pagination
     let countQuery = supabase
@@ -327,11 +305,7 @@ router.get("/admin/:postId", protectAdmin, asyncHandler(async (req: Request, res
   try {
     const { data: post, error } = await supabase
       .from("posts")
-      .select(`
-        *,
-        categories(id, name),
-        statuses(id, status)
-      `)
+      .select("*")
       .eq("id", postIdFromClient)
       .single();
 
