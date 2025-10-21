@@ -115,15 +115,11 @@ export class SupabaseRlsHelper {
     console.log(`🗑️ Attempting to delete from ${table} with filters:`, filters);
     
     try {
-      // ใช้วิธีที่ถูกต้อง - สร้าง query builder และ chain methods
+      // ใช้วิธีที่ง่ายกว่า - สร้าง query builder และใช้ .match()
       let query = this.supabase.from(table);
       
-      // เพิ่ม filters โดยใช้ method chaining - ใช้ for...of แทน forEach
-      for (const [key, value] of Object.entries(filters)) {
-        console.log(`🔧 Applying filter: ${key} = ${value}`);
-        query = (query as any).eq(key, value);
-        console.log(`✅ Filter applied: ${key} = ${value}`);
-      }
+      // ใช้ .match() เพื่อใส่ filters ทั้งหมดในครั้งเดียว
+      query = (query as any).match(filters);
 
       console.log(`🔍 Executing delete query...`);
       
