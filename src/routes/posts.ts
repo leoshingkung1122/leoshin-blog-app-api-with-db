@@ -26,40 +26,13 @@ const upload = multer({
 });
 
 // POST /posts - Create a new post
-router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asyncHandler(async (req: Request, res: Response) => {
+router.post("/", protectAdmin, validatePostData, asyncHandler(async (req: Request, res: Response) => {
   const newPost = req.body;
   const accessToken = (req as any).accessToken;
-  const imageFile = req.file;
   
   const supabaseRls = createSupabaseRlsHelper(accessToken);
 
   try {
-    let imageUrl = newPost.image; // Default to provided image URL
-
-    // If image file is uploaded, upload it to Supabase Storage
-    if (imageFile) {
-      // กำหนด bucket และ path ที่จะเก็บไฟล์ใน Supabase
-      const bucketName = "post-images";
-      const fileName = `post-${Date.now()}-${imageFile.originalname}`;
-      
-      // อัปโหลดไฟล์ไปยัง Supabase Storage
-      const { data, error } = await supabaseRls.uploadFile(
-        bucketName,
-        fileName,
-        imageFile.buffer,
-        imageFile.mimetype
-      );
-
-      if (error) {
-        throw new Error(`File upload failed: ${error}`);
-      }
-
-      // ดึง URL สาธารณะของไฟล์ที่อัปโหลด
-      const publicUrl = await supabaseRls.getPublicUrl(bucketName, data.path);
-
-      imageUrl = publicUrl;
-    }
-
     // Generate slug from title
     const generateSlug = (title: string) => {
       return title
@@ -75,7 +48,7 @@ router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asy
     console.log("Creating post with data:", {
       title: newPost.title,
       slug: slug,
-      image: imageUrl,
+      image: newPost.image,
       category_id: Number(newPost.category_id),
       author_id: (req as any).user?.id,
       description: newPost.description,
@@ -87,7 +60,7 @@ router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asy
     const result = await supabaseRls.insert("blog_posts", {
       title: newPost.title,
       slug: slug, // Add slug field
-      image: imageUrl,
+      image: newPost.image,
       category_id: Number(newPost.category_id), // Convert string to number
       author_id: (req as any).user?.id, // Add author_id from authenticated user (UUID)
       description: newPost.description,
@@ -109,62 +82,14 @@ router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asy
 }));
 
 // PUT /posts/:postId - Update an existing post
-router.put("/:postId", protectAdmin, upload.single('imageFile'), validatePostData, asyncHandler(async (req: Request, res: Response) => {
+router.put("/:postId", protectAdmin, validatePostData, asyncHandler(async (req: Request, res: Response) => {
   const postId = req.params.postId;
   const updatedPost = req.body;
   const accessToken = (req as any).accessToken;
-  const imageFile = req.file;
   
   const supabaseRls = createSupabaseRlsHelper(accessToken);
 
   try {
-    // First, get the existing post to check for old image
-    const existingPost = await supabaseRls.select("blog_posts", "*", { id: postId });
-    if (!existingPost || existingPost.length === 0) {
-      throw new NotFoundError("Post", postId);
-    }
-
-    let imageUrl = updatedPost.image || (existingPost[0] as any).image; // Keep existing image if no new one provided
-
-    // If new image file is uploaded, upload it to Supabase Storage
-    if (imageFile) {
-      // กำหนด bucket และ path ที่จะเก็บไฟล์ใน Supabase
-      const bucketName = "post-images";
-      const fileName = `post-${postId}-${Date.now()}-${imageFile.originalname}`;
-      
-      // อัปโหลดไฟล์ไปยัง Supabase Storage
-      const { data, error } = await supabaseRls.uploadFile(
-        bucketName,
-        fileName,
-        imageFile.buffer,
-        imageFile.mimetype
-      );
-
-      if (error) {
-        throw new Error(`File upload failed: ${error}`);
-      }
-
-      // ดึง URL สาธารณะของไฟล์ที่อัปโหลด
-      const publicUrl = await supabaseRls.getPublicUrl(bucketName, data.path);
-
-      imageUrl = publicUrl;
-
-      // ลบรูปภาพเก่าถ้ามี (ถ้าไม่ใช่ placeholder)
-      const oldImageUrl = (existingPost[0] as any).image;
-      if (oldImageUrl && !oldImageUrl.includes('via.placeholder.com') && !oldImageUrl.includes('default')) {
-        try {
-          // Extract filename from old image URL
-          const oldFileName = oldImageUrl.split('/').pop();
-          if (oldFileName) {
-            await supabaseRls.deleteFile(bucketName, oldFileName);
-          }
-        } catch (deleteError) {
-          console.warn("Failed to delete old image:", deleteError);
-          // Don't throw error, just log warning
-        }
-      }
-    }
-
     // Generate slug from title
     const generateSlug = (title: string) => {
       return title
@@ -180,7 +105,7 @@ router.put("/:postId", protectAdmin, upload.single('imageFile'), validatePostDat
     const result = await supabaseRls.update("blog_posts", {
       title: updatedPost.title,
       slug: slug, // Add slug field
-      image: imageUrl,
+      image: updatedPost.image,
       category_id: Number(updatedPost.category_id), // Convert string to number
       description: updatedPost.description,
       content: updatedPost.content,
@@ -325,6 +250,39 @@ router.get("/stats", protectAdmin, asyncHandler(async (req: Request, res: Respon
     console.error("Stats API error:", error);
     throw new DatabaseError("Failed to fetch statistics");
   }
+}));
+
+// POST /posts/signed-url - Generate a signed URL for uploading a file
+router.post("/signed-url", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { fileName, fileType } = req.body;
+    const accessToken = (req as any).accessToken;
+    const supabaseRls = createSupabaseRlsHelper(accessToken);
+
+    if (!fileName || !fileType) {
+        return res.status(400).json({ success: false, error: "fileName and fileType are required." });
+    }
+
+    try {
+        const bucketName = "post-images";
+        // Create a unique path for the file to avoid overwriting
+        const filePath = `post-${Date.now()}-${fileName}`;
+
+        const { data, error } = await supabaseRls.createSignedUploadUrl(bucketName, filePath);
+
+        if (error) {
+            throw new DatabaseError(`Failed to create signed URL: ${error.message}`);
+        }
+
+        // The 'token' in the data is the signed key, and 'path' is the full path for the upload
+        return res.status(200).json({ success: true, ...data });
+
+    } catch (error) {
+        console.error("Error creating signed URL:", error);
+        if (error instanceof DatabaseError) {
+            throw error;
+        }
+        throw new DatabaseError("Failed to create signed URL.");
+    }
 }));
 
 // GET /posts/admin/:postId - Get a specific post for admin (including drafts)
@@ -547,6 +505,30 @@ router.delete("/:postId", protectAdmin, asyncHandler(async (req: Request, res: R
   } catch (error) {
     throw new DatabaseError("Failed to delete post");
   }
+}));
+
+// DELETE /posts/storage/delete/:fileName - Delete a file from storage
+router.delete("/storage/delete/:fileName", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const { fileName } = req.params;
+    const accessToken = (req as any).accessToken;
+    const supabaseRls = createSupabaseRlsHelper(accessToken);
+
+    if (!fileName) {
+        return res.status(400).json({ success: false, error: "fileName is required." });
+    }
+
+    try {
+        const bucketName = "post-images";
+        await supabaseRls.deleteFile(bucketName, fileName);
+        return res.status(200).json({ success: true, message: "File deleted successfully." });
+
+    } catch (error) {
+        console.error("Error deleting file:", error);
+        if (error instanceof DatabaseError) {
+            throw error;
+        }
+        throw new DatabaseError("Failed to delete file.");
+    }
 }));
 
 export default router;

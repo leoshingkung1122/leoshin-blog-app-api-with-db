@@ -192,6 +192,16 @@ export class SupabaseRlsHelper {
 
     return true;
   }
+
+  /**
+   * สร้าง Signed URL สำหรับ Upload
+   */
+  async createSignedUploadUrl(bucket: string, path: string) {
+    return this.supabase.storage
+      .from(bucket)
+      .createSignedUploadUrl(path);
+  }
+
   /**
    * ดึงข้อมูลผู้ใช้ปัจจุบันจาก auth.uid()
    */

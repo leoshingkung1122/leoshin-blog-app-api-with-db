@@ -11,6 +11,7 @@ const port: number = parseInt(process.env.PORT || "4001", 10);
 
 app.use(cors({
   origin: ['https://leoshin-blog-app.vercel.app', 'http://localhost:5173', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
