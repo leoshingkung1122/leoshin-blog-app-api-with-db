@@ -44,6 +44,7 @@ router.get("/", protectUser, asyncHandler(async (req: Request, res: Response) =>
         name: (users[0] as any).name,
         role: (users[0] as any).role,
         profilePic: (users[0] as any).profile_pic,
+        introduction: (users[0] as any).introduction,
       }
     });
   } catch (error) {
@@ -55,7 +56,7 @@ router.get("/", protectUser, asyncHandler(async (req: Request, res: Response) =>
 router.put("/", protectUser, upload.single('imageFile'), asyncHandler(async (req: Request, res: Response) => {
   const accessToken = (req as any).accessToken;
   const user = (req as any).user;
-  const { username, name } = req.body;
+  const { username, name, introduction } = req.body;
   const imageFile = req.file;
 
   try {
@@ -74,6 +75,11 @@ router.put("/", protectUser, upload.single('imageFile'), asyncHandler(async (req
     // Username cannot be changed - only allow name updates
     if (name !== undefined && name !== '') {
       updateData.name = name;
+    }
+
+    // Update introduction if provided
+    if (introduction !== undefined) {
+      updateData.introduction = introduction;
     }
 
     // ถ้ามีการอัปโหลดรูปภาพใหม่ ให้เก็บเป็น base64 (ชั่วคราว)
@@ -105,7 +111,7 @@ router.put("/", protectUser, upload.single('imageFile'), asyncHandler(async (req
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
       user: user ? { id: user.id, email: user.email } : "No user data",
-      body: { username, name },
+      body: { username, name, introduction },
       hasImageFile: !!imageFile
     });
     

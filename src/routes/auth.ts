@@ -133,6 +133,7 @@ authRouter.post("/register", async (req: Request, res: Response) => {
         name: (users[0] as any).name,
         role: (users[0] as any).role,
         profilePic: (users[0] as any).profile_pic,
+        introduction: (users[0] as any).introduction,
       });
     } catch (error) {
       return res.status(500).json({ error: "Internal server error" });

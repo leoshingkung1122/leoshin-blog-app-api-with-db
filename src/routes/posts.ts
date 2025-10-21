@@ -354,7 +354,8 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
       .select(`
         *,
         categories(name),
-        post_status(name)
+        post_status(name),
+        users!author_id(name, username, profile_pic, introduction)
       `)
       .eq("status_id", 1) // Published posts (status_id = 1 for Published)
       .order("published_at", { ascending: false })
@@ -433,7 +434,8 @@ router.get("/:postId", asyncHandler(async (req: Request, res: Response) => {
       .select(`
         *,
         categories(name),
-        post_status(name)
+        post_status(name),
+        users!author_id(name, username, profile_pic, introduction)
       `)
       .eq("id", postIdFromClient)
       .eq("status_id", 1) // Only published posts
