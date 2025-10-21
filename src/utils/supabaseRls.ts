@@ -144,18 +144,27 @@ export class SupabaseRlsHelper {
    * อัปโหลดไฟล์ไปยัง Supabase Storage
    */
   async uploadFile(bucket: string, fileName: string, fileBuffer: Buffer, contentType: string) {
-    const { data, error } = await this.supabase.storage
-      .from(bucket)
-      .upload(fileName, fileBuffer, {
-        contentType,
-        upsert: false
-      });
+    try {
+      console.log(`Uploading file: ${fileName}, size: ${fileBuffer.length} bytes, type: ${contentType}`);
+      
+      const { data, error } = await this.supabase.storage
+        .from(bucket)
+        .upload(fileName, fileBuffer, {
+          contentType,
+          upsert: false
+        });
 
-    if (error) {
-      throw new Error(`File upload failed: ${error.message}`);
+      if (error) {
+        console.error("Supabase upload error:", error);
+        throw new Error(`File upload failed: ${error.message}`);
+      }
+
+      console.log("File uploaded successfully:", data);
+      return data;
+    } catch (err) {
+      console.error("Upload file error:", err);
+      throw err;
     }
-
-    return data;
   }
 
   /**

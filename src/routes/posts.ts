@@ -13,7 +13,7 @@ const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB limit (increased from 5MB)
   },
   fileFilter: (req, file, cb) => {
     // Check if file is an image
@@ -49,6 +49,17 @@ router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asy
       imageUrl = uploadResult.path;
     }
 
+    console.log("Creating post with data:", {
+      title: newPost.title,
+      image: imageUrl,
+      category_id: Number(newPost.category_id),
+      author_id: (req as any).user?.id,
+      description: newPost.description,
+      content: newPost.content,
+      status_id: Number(newPost.status_id),
+      published_at: Number(newPost.status_id) === 1 ? new Date() : null,
+    });
+
     const result = await supabaseRls.insert("blog_posts", {
       title: newPost.title,
       image: imageUrl,
@@ -66,7 +77,8 @@ router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asy
       data: result
     });
   } catch (error) {
-    throw new DatabaseError("Failed to create post");
+    console.error("Error creating post:", error);
+    throw new DatabaseError(`Failed to create post: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }));
 
