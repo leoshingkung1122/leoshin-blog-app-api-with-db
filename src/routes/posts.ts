@@ -4,7 +4,7 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { DatabaseError, NotFoundError, ValidationError } from "../utils/errors";
 import protectAdmin from "../middleware/protectAdmin";
 import validatePostData from "../middleware/postValidation";
-import { createSupabaseRlsHelper } from "../utils/supabaseRls";
+import { createSupabaseRlsHelper, createSupabaseAdminHelper } from "../utils/supabaseRls";
 import { getSupabase } from "../utils/supabase";
 
 const router = Router();
@@ -507,17 +507,18 @@ router.delete("/:postId", protectAdmin, asyncHandler(async (req: Request, res: R
     throw new ValidationError("Invalid post ID");
   }
 
-  const supabaseRls = createSupabaseRlsHelper(accessToken);
+  // Use Admin helper for delete operations (bypass RLS)
+  const supabaseAdmin = createSupabaseAdminHelper();
 
   try {
     // Delete related comments first
-    await supabaseRls.delete("comments", { post_id: postIdFromClient });
+    await supabaseAdmin.delete("comments", { post_id: postIdFromClient });
     
     // Delete related post_likes
-    await supabaseRls.delete("post_likes", { post_id: postIdFromClient });
+    await supabaseAdmin.delete("post_likes", { post_id: postIdFromClient });
     
     // Finally delete the post
-    const result = await supabaseRls.delete("blog_posts", { id: postIdFromClient });
+    const result = await supabaseAdmin.delete("blog_posts", { id: postIdFromClient });
 
     return res.status(200).json({
       success: true,

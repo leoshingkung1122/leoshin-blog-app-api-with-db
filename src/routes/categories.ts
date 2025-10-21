@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { asyncHandler } from "../middleware/errorHandler";
 import { DatabaseError, NotFoundError, ValidationError } from "../utils/errors";
 import protectAdmin from "../middleware/protectAdmin";
-import { createSupabaseRlsHelper } from "../utils/supabaseRls";
+import { createSupabaseRlsHelper, createSupabaseAdminHelper } from "../utils/supabaseRls";
 import { getSupabase } from "../utils/supabase";
 
 const router = Router();
@@ -202,31 +202,32 @@ router.delete("/:categoryId", protectAdmin, asyncHandler(async (req: Request, re
     throw new ValidationError("Invalid category ID");
   }
 
-  const supabaseRls = createSupabaseRlsHelper(accessToken);
+  // Use Admin helper for delete operations (bypass RLS)
+  const supabaseAdmin = createSupabaseAdminHelper();
 
   try {
     // Check if category exists
-    const existingCategory = await supabaseRls.select("categories", "*", { id: categoryId });
+    const existingCategory = await supabaseAdmin.select("categories", "*", { id: categoryId });
     if (!existingCategory || existingCategory.length === 0) {
       throw new NotFoundError("Category", categoryId);
     }
 
     // Get all posts with this category to clean up related data first
-    const postsWithCategory = await supabaseRls.select("blog_posts", "*", { category_id: categoryId });
+    const postsWithCategory = await supabaseAdmin.select("blog_posts", "*", { category_id: categoryId });
     
     // Clean up related data for posts in this category (comments and post_likes)
     if (postsWithCategory && postsWithCategory.length > 0) {
       for (const post of postsWithCategory) {
         // Delete related comments first
-        await supabaseRls.delete("comments", { post_id: (post as any).id });
+        await supabaseAdmin.delete("comments", { post_id: (post as any).id });
         // Delete related post_likes
-        await supabaseRls.delete("post_likes", { post_id: (post as any).id });
+        await supabaseAdmin.delete("post_likes", { post_id: (post as any).id });
         // Note: Posts will be deleted automatically due to ON DELETE CASCADE constraint
       }
     }
 
     // Now delete the category (posts will be deleted automatically due to CASCADE)
-    const result = await supabaseRls.delete("categories", { id: categoryId });
+    const result = await supabaseAdmin.delete("categories", { id: categoryId });
 
     return res.status(200).json({
       success: true,

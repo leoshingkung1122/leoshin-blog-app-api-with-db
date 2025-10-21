@@ -39,4 +39,24 @@ export function getSupabaseWithAuth(token: string): SupabaseClient {
   return supabase;
 }
 
+// สร้าง Supabase client สำหรับ Admin operations (ใช้ service role key)
+export function getSupabaseAdmin(): SupabaseClient {
+  const url = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    throw new Error("Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.");
+  }
+
+  // สร้าง client ใหม่ทุกครั้งด้วย service role key (bypass RLS)
+  const supabase = createClient(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+
+  return supabase;
+}
+
 

@@ -1,5 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseWithAuth } from "./supabase";
+import { getSupabaseWithAuth, getSupabaseAdmin } from "./supabase";
 
 /**
  * Helper class สำหรับทำ database operations ผ่าน Supabase Client
@@ -8,8 +8,12 @@ import { getSupabaseWithAuth } from "./supabase";
 export class SupabaseRlsHelper {
   public supabase: SupabaseClient;
 
-  constructor(accessToken: string) {
-    this.supabase = getSupabaseWithAuth(accessToken);
+  constructor(accessTokenOrClient: string | SupabaseClient) {
+    if (typeof accessTokenOrClient === 'string') {
+      this.supabase = getSupabaseWithAuth(accessTokenOrClient);
+    } else {
+      this.supabase = accessTokenOrClient;
+    }
   }
 
   /**
@@ -157,6 +161,14 @@ export class SupabaseRlsHelper {
  */
 export function createSupabaseRlsHelper(accessToken: string): SupabaseRlsHelper {
   return new SupabaseRlsHelper(accessToken);
+}
+
+/**
+ * Factory function สำหรับสร้าง Admin SupabaseRlsHelper instance (bypass RLS)
+ */
+export function createSupabaseAdminHelper(): SupabaseRlsHelper {
+  const supabase = getSupabaseAdmin();
+  return new SupabaseRlsHelper(supabase);
 }
 
 /**
