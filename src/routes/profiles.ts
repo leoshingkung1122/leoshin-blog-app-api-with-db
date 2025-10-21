@@ -61,24 +61,31 @@ router.put("/", protectUser, upload.single('imageFile'), asyncHandler(async (req
   try {
     const supabaseRls = createSupabaseRlsHelper(accessToken);
     
-    // ตรวจสอบว่า username ใหม่ไม่ซ้ำกับคนอื่น (ถ้ามีการเปลี่ยน)
-    if (username && username !== (user as any).username) {
-      const existingUsers = await supabaseRls.select("users", "id", { username });
-      if (existingUsers && existingUsers.length > 0) {
-        return res.status(400).json({ error: "Username is already taken" });
-      }
+    // Get current user data from database first
+    const currentUserData = await supabaseRls.select("users", "*", { id: user.id });
+    if (!currentUserData || currentUserData.length === 0) {
+      return res.status(404).json({ error: "User profile not found" });
     }
+    
+    const currentUser = currentUserData[0] as any;
+    
+    const updateData: any = {};
 
-    const updateData: any = {
-      username: username || undefined,
-      name: name || undefined,
-    };
+    // Username cannot be changed - only allow name updates
+    if (name !== undefined && name !== '') {
+      updateData.name = name;
+    }
 
     // ถ้ามีการอัปโหลดรูปภาพใหม่ ให้เก็บเป็น base64 (ชั่วคราว)
     if (imageFile) {
       const base64Image = imageFile.buffer.toString('base64');
       const dataUrl = `data:${imageFile.mimetype};base64,${base64Image}`;
       updateData.profile_pic = dataUrl;
+    }
+
+    // Check if there's anything to update
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: "No data provided to update" });
     }
 
     const result = await supabaseRls.update(
