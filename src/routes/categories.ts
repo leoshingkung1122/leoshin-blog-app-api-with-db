@@ -86,8 +86,21 @@ router.post("/", protectAdmin, asyncHandler(async (req: Request, res: Response) 
       });
     }
 
+    // Generate slug from name
+    const generateSlug = (name: string) => {
+      return name
+        .toLowerCase()
+        .replace(/[^a-z0-9 -]/g, '') // Remove special characters
+        .replace(/\s+/g, '-') // Replace spaces with hyphens
+        .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+        .trim();
+    };
+
+    const slug = generateSlug(name.trim());
+
     const result = await supabaseRls.insert("categories", {
       name: name.trim(),
+      slug: slug,
     });
 
     return res.status(201).json({ 
@@ -96,7 +109,8 @@ router.post("/", protectAdmin, asyncHandler(async (req: Request, res: Response) 
       data: result
     });
   } catch (error) {
-    throw new DatabaseError("Failed to create category");
+    console.error("Error creating category:", error);
+    throw new DatabaseError(`Failed to create category: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }));
 
@@ -144,9 +158,24 @@ router.put("/:categoryId", protectAdmin, asyncHandler(async (req: Request, res: 
       });
     }
 
+    // Generate slug from name
+    const generateSlug = (name: string) => {
+      return name
+        .toLowerCase()
+        .replace(/[^a-z0-9 -]/g, '') // Remove special characters
+        .replace(/\s+/g, '-') // Replace spaces with hyphens
+        .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+        .trim();
+    };
+
+    const slug = generateSlug(name.trim());
+
     const result = await supabaseRls.update(
       "categories",
-      { name: name.trim() },
+      { 
+        name: name.trim(),
+        slug: slug,
+      },
       { id: categoryId }
     );
 
@@ -182,22 +211,21 @@ router.delete("/:categoryId", protectAdmin, asyncHandler(async (req: Request, re
       throw new NotFoundError("Category", categoryId);
     }
 
-    // Get all posts with this category to delete them first
+    // Get all posts with this category to clean up related data first
     const postsWithCategory = await supabaseRls.select("blog_posts", "*", { category_id: categoryId });
     
-    // Delete all posts with this category first (cascading delete)
+    // Clean up related data for posts in this category (comments and post_likes)
     if (postsWithCategory && postsWithCategory.length > 0) {
       for (const post of postsWithCategory) {
         // Delete related comments first
         await supabaseRls.delete("comments", { post_id: (post as any).id });
         // Delete related post_likes
         await supabaseRls.delete("post_likes", { post_id: (post as any).id });
-        // Delete the post
-        await supabaseRls.delete("blog_posts", { id: (post as any).id });
+        // Note: Posts will be deleted automatically due to ON DELETE CASCADE constraint
       }
     }
 
-    // Now delete the category
+    // Now delete the category (posts will be deleted automatically due to CASCADE)
     const result = await supabaseRls.delete("categories", { id: categoryId });
 
     return res.status(200).json({
@@ -206,10 +234,11 @@ router.delete("/:categoryId", protectAdmin, asyncHandler(async (req: Request, re
       data: result
     });
   } catch (error) {
+    console.error("Error deleting category:", error);
     if (error instanceof NotFoundError) {
       throw error;
     }
-    throw new DatabaseError("Failed to delete category");
+    throw new DatabaseError(`Failed to delete category: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }));
 

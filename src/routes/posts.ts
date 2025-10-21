@@ -510,6 +510,13 @@ router.delete("/:postId", protectAdmin, asyncHandler(async (req: Request, res: R
   const supabaseRls = createSupabaseRlsHelper(accessToken);
 
   try {
+    // Delete related comments first
+    await supabaseRls.delete("comments", { post_id: postIdFromClient });
+    
+    // Delete related post_likes
+    await supabaseRls.delete("post_likes", { post_id: postIdFromClient });
+    
+    // Finally delete the post
     const result = await supabaseRls.delete("blog_posts", { id: postIdFromClient });
 
     return res.status(200).json({
@@ -518,6 +525,7 @@ router.delete("/:postId", protectAdmin, asyncHandler(async (req: Request, res: R
       data: result
     });
   } catch (error) {
+    console.error("Error deleting post:", error);
     throw new DatabaseError("Failed to delete post");
   }
 }));
