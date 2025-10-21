@@ -49,8 +49,21 @@ router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asy
       imageUrl = uploadResult.path;
     }
 
+    // Generate slug from title
+    const generateSlug = (title: string) => {
+      return title
+        .toLowerCase()
+        .replace(/[^a-z0-9 -]/g, '') // Remove special characters
+        .replace(/\s+/g, '-') // Replace spaces with hyphens
+        .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+        .trim();
+    };
+
+    const slug = generateSlug(newPost.title);
+
     console.log("Creating post with data:", {
       title: newPost.title,
+      slug: slug,
       image: imageUrl,
       category_id: Number(newPost.category_id),
       author_id: (req as any).user?.id,
@@ -62,6 +75,7 @@ router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asy
 
     const result = await supabaseRls.insert("blog_posts", {
       title: newPost.title,
+      slug: slug, // Add slug field
       image: imageUrl,
       category_id: Number(newPost.category_id), // Convert string to number
       author_id: (req as any).user?.id, // Add author_id from authenticated user (UUID)
@@ -69,6 +83,7 @@ router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asy
       content: newPost.content,
       status_id: Number(newPost.status_id), // Convert string to number
       published_at: Number(newPost.status_id) === 1 ? new Date() : null, // Set published_at if published
+      // likes and views will use database defaults (0)
     });
 
     return res.status(201).json({ 
@@ -128,8 +143,21 @@ router.put("/:postId", protectAdmin, upload.single('imageFile'), validatePostDat
       }
     }
 
+    // Generate slug from title
+    const generateSlug = (title: string) => {
+      return title
+        .toLowerCase()
+        .replace(/[^a-z0-9 -]/g, '') // Remove special characters
+        .replace(/\s+/g, '-') // Replace spaces with hyphens
+        .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+        .trim();
+    };
+
+    const slug = generateSlug(updatedPost.title);
+
     const result = await supabaseRls.update("blog_posts", {
       title: updatedPost.title,
+      slug: slug, // Add slug field
       image: imageUrl,
       category_id: Number(updatedPost.category_id), // Convert string to number
       description: updatedPost.description,

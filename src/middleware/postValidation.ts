@@ -22,10 +22,10 @@ function validatePostData(req: Request, res: Response, next: NextFunction) {
     errors.push("Title is required");
   }
 
-  // Image validation - either image URL or imageFile should be provided
-  if ((!image || image.trim() === "") && !imageFile) {
-    errors.push("Image URL or image file is required");
-  }
+  // Image validation - make image optional since database allows NULL
+  // if ((!image || image.trim() === "") && !imageFile) {
+  //   errors.push("Image URL or image file is required");
+  // }
 
   if (category_id === undefined || category_id === null) {
     errors.push("Category ID is required");
