@@ -257,7 +257,7 @@ router.post("/signed-url", protectAdmin, asyncHandler(async (req: Request, res: 
     const { fileName, fileType } = req.body;
     const accessToken = (req as any).accessToken;
     
-    console.log("Signed URL request:", { fileName, fileType, hasAccessToken: !!accessToken });
+    console.log("Signed URL request received:", { fileName, fileType, hasAccessToken: !!accessToken });
 
     if (!fileName || !fileType) {
         console.error("Missing required fields:", { fileName, fileType });
@@ -270,12 +270,47 @@ router.post("/signed-url", protectAdmin, asyncHandler(async (req: Request, res: 
     }
 
     try {
+        // Check environment variables
+        console.log("Environment check:", {
+            hasSupabaseUrl: !!process.env.SUPABASE_URL,
+            hasSupabaseAnonKey: !!process.env.SUPABASE_ANON_KEY,
+            supabaseUrl: process.env.SUPABASE_URL?.substring(0, 20) + "..."
+        });
+
         const supabaseRls = createSupabaseRlsHelper(accessToken);
         const bucketName = "post-images";
         
         // Create a unique path for the file to avoid overwriting
         const filePath = `post-${Date.now()}-${fileName}`;
         console.log("Creating signed URL for:", { bucketName, filePath });
+
+        // Test bucket access first
+        console.log("Testing bucket access...");
+        const { data: buckets, error: bucketError } = await supabaseRls.supabase.storage.listBuckets();
+        if (bucketError) {
+            console.error("Bucket access error:", bucketError);
+            throw new DatabaseError(`Cannot access Supabase storage: ${bucketError.message}`);
+        }
+        console.log("Available buckets:", buckets?.map(b => b.name));
+
+        // Check if post-images bucket exists, create if not
+        const bucketExists = buckets?.some(bucket => bucket.name === bucketName);
+        if (!bucketExists) {
+            console.log(`Bucket '${bucketName}' does not exist, creating...`);
+            const { data: newBucket, error: createError } = await supabaseRls.supabase.storage.createBucket(bucketName, {
+                public: true,
+                allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+                fileSizeLimit: 10485760 // 10MB
+            });
+            
+            if (createError) {
+                console.error("Error creating bucket:", createError);
+                throw new DatabaseError(`Failed to create bucket: ${createError.message}`);
+            }
+            console.log("Bucket created successfully:", newBucket);
+        } else {
+            console.log(`Bucket '${bucketName}' exists`);
+        }
 
         const { data, error } = await supabaseRls.createSignedUploadUrl(bucketName, filePath);
 
@@ -284,7 +319,7 @@ router.post("/signed-url", protectAdmin, asyncHandler(async (req: Request, res: 
             throw new DatabaseError(`Failed to create signed URL: ${error.message}`);
         }
 
-        console.log("Signed URL created successfully:", data);
+        console.log("Signed URL created successfully:", { path: data.path, hasToken: !!data.token });
         // The 'token' in the data is the signed key, and 'path' is the full path for the upload
         return res.status(200).json({ success: true, ...data });
 

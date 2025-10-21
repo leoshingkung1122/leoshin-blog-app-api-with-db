@@ -6,7 +6,7 @@ import { getSupabaseWithAuth } from "./supabase";
  * เพื่อให้ RLS policies ทำงานได้ถูกต้อง
  */
 export class SupabaseRlsHelper {
-  private supabase: SupabaseClient;
+  public supabase: SupabaseClient;
 
   constructor(accessToken: string) {
     this.supabase = getSupabaseWithAuth(accessToken);
