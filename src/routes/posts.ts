@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import multer from "multer";
 import { asyncHandler } from "../middleware/errorHandler";
 import { DatabaseError, NotFoundError, ValidationError } from "../utils/errors";
 import protectAdmin from "../middleware/protectAdmin";
@@ -8,17 +9,49 @@ import { getSupabase } from "../utils/supabase";
 
 const router = Router();
 
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Check if file is an image
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
+
 // POST /posts - Create a new post
-router.post("/", protectAdmin, validatePostData, asyncHandler(async (req: Request, res: Response) => {
+router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asyncHandler(async (req: Request, res: Response) => {
   const newPost = req.body;
   const accessToken = (req as any).accessToken;
+  const imageFile = req.file;
   
   const supabaseRls = createSupabaseRlsHelper(accessToken);
 
   try {
+    let imageUrl = newPost.image; // Default to provided image URL
+
+    // If image file is uploaded, upload it to Supabase Storage
+    if (imageFile) {
+      const fileName = `post-${Date.now()}-${imageFile.originalname}`;
+      const uploadResult = await supabaseRls.uploadFile(
+        'post-images',
+        fileName,
+        imageFile.buffer,
+        imageFile.mimetype
+      );
+
+      imageUrl = uploadResult.path;
+    }
+
     const result = await supabaseRls.insert("blog_posts", {
       title: newPost.title,
-      image: newPost.image,
+      image: imageUrl,
       category_id: newPost.category_id,
       description: newPost.description,
       content: newPost.content,
@@ -33,6 +66,76 @@ router.post("/", protectAdmin, validatePostData, asyncHandler(async (req: Reques
     });
   } catch (error) {
     throw new DatabaseError("Failed to create post");
+  }
+}));
+
+// PUT /posts/:postId - Update an existing post
+router.put("/:postId", protectAdmin, upload.single('imageFile'), validatePostData, asyncHandler(async (req: Request, res: Response) => {
+  const postId = req.params.postId;
+  const updatedPost = req.body;
+  const accessToken = (req as any).accessToken;
+  const imageFile = req.file;
+  
+  const supabaseRls = createSupabaseRlsHelper(accessToken);
+
+  try {
+    // First, get the existing post to check for old image
+    const existingPost = await supabaseRls.select("blog_posts", "*", { id: postId });
+    if (!existingPost || existingPost.length === 0) {
+      throw new NotFoundError("Post", postId);
+    }
+
+    let imageUrl = updatedPost.image || (existingPost[0] as any).image; // Keep existing image if no new one provided
+
+    // If new image file is uploaded, upload it and delete the old one
+    if (imageFile) {
+      const fileName = `post-${postId}-${Date.now()}-${imageFile.originalname}`;
+      const uploadResult = await supabaseRls.uploadFile(
+        'post-images',
+        fileName,
+        imageFile.buffer,
+        imageFile.mimetype
+      );
+
+      imageUrl = uploadResult.path;
+
+      // Delete old image if it exists and is not a placeholder
+      const oldImageUrl = (existingPost[0] as any).image;
+      if (oldImageUrl && !oldImageUrl.includes('via.placeholder.com') && !oldImageUrl.includes('default')) {
+        try {
+          // Extract filename from old image URL
+          const oldFileName = oldImageUrl.split('/').pop();
+          if (oldFileName) {
+            await supabaseRls.deleteFile('post-images', oldFileName);
+          }
+        } catch (deleteError) {
+          console.warn("Failed to delete old image:", deleteError);
+          // Don't throw error, just log warning
+        }
+      }
+    }
+
+    const result = await supabaseRls.update("blog_posts", {
+      title: updatedPost.title,
+      image: imageUrl,
+      category_id: updatedPost.category_id,
+      description: updatedPost.description,
+      content: updatedPost.content,
+      status_id: updatedPost.status_id,
+      published_at: updatedPost.status_id === 1 ? new Date() : null,
+      updated_at: new Date()
+    }, { id: postId });
+
+    return res.status(200).json({ 
+      success: true,
+      message: "Updated post successfully",
+      data: result
+    });
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new DatabaseError("Failed to update post");
   }
 }));
 

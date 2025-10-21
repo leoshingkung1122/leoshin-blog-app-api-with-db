@@ -4,7 +4,8 @@ import { ValidationError } from "../utils/errors";
 
 interface PostData {
   title: string;
-  image: string;
+  image?: string;
+  imageFile?: any; // For file uploads
   category_id: number;
   description: string;
   content: string;
@@ -13,6 +14,7 @@ interface PostData {
 
 function validatePostData(req: Request, res: Response, next: NextFunction) {
   const { title, image, category_id, description, content, status_id } = req.body;
+  const imageFile = req.file; // From multer
   const errors: string[] = [];
 
   // Check for required fields
@@ -20,8 +22,9 @@ function validatePostData(req: Request, res: Response, next: NextFunction) {
     errors.push("Title is required");
   }
 
-  if (!image || image.trim() === "") {
-    errors.push("Image URL is required");
+  // Image validation - either image URL or imageFile should be provided
+  if ((!image || image.trim() === "") && !imageFile) {
+    errors.push("Image URL or image file is required");
   }
 
   if (category_id === undefined || category_id === null) {
@@ -82,7 +85,7 @@ function validatePostData(req: Request, res: Response, next: NextFunction) {
     errors.push("Status ID must be a positive integer");
   }
 
-  // URL validation for image
+  // URL validation for image (only if image is provided)
   if (image && typeof image === "string") {
     try {
       new URL(image);

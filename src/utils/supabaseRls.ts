@@ -141,6 +141,39 @@ export class SupabaseRlsHelper {
   }
 
   /**
+   * อัปโหลดไฟล์ไปยัง Supabase Storage
+   */
+  async uploadFile(bucket: string, fileName: string, fileBuffer: Buffer, contentType: string) {
+    const { data, error } = await this.supabase.storage
+      .from(bucket)
+      .upload(fileName, fileBuffer, {
+        contentType,
+        upsert: false
+      });
+
+    if (error) {
+      throw new Error(`File upload failed: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  /**
+   * ลบไฟล์จาก Supabase Storage
+   */
+  async deleteFile(bucket: string, fileName: string) {
+    const { error } = await this.supabase.storage
+      .from(bucket)
+      .remove([fileName]);
+
+    if (error) {
+      throw new Error(`File deletion failed: ${error.message}`);
+    }
+
+    return true;
+  }
+
+  /**
    * ดึงข้อมูลผู้ใช้ปัจจุบันจาก auth.uid()
    */
   async getCurrentUser() {
