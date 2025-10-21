@@ -4,6 +4,7 @@ import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import postsRouter from "./routes/posts";
 import profilesRouter from "./routes/profiles";
 import authRouter from "./routes/auth";
+import categoriesRouter from "./routes/categories";
 
 const app = express();
 const port: number = parseInt(process.env.PORT || "4001", 10);
@@ -23,6 +24,7 @@ app.get("/", (req, res) => {
 app.use("/posts", postsRouter);
 app.use("/profiles", profilesRouter);
 app.use("/auth", authRouter);
+app.use("/categories", categoriesRouter);
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);
