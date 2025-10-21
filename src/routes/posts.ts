@@ -50,72 +50,45 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const supabase = getSupabase();
 
   try {
-    let supabaseQuery = supabase
+    // Simple query first to test
+    const { data: posts, error } = await supabase
       .from("posts")
       .select("*")
-      .eq("status_id", 2) // published posts only
-      .order("date", { ascending: false })
+      .eq("status_id", 2)
+      .order("created_at", { ascending: false })
       .range(offset, offset + safeLimit - 1);
 
-    // เพิ่ม filters ถ้ามี - category filter จะทำใน post-processing
-    // if (category) {
-    //   supabaseQuery = supabaseQuery.ilike("categories.name", `%${category}%`);
-    // }
-
-    if (keyword) {
-      supabaseQuery = supabaseQuery.or(`title.ilike.%${keyword}%,description.ilike.%${keyword}%,content.ilike.%${keyword}%`);
-    }
-
-    const { data: posts, error } = await supabaseQuery;
-
     if (error) {
-      throw new DatabaseError("Failed to fetch posts");
+      console.error("Supabase error:", error);
+      throw new DatabaseError(`Failed to fetch posts: ${error.message}`);
     }
 
-    // For now, we'll skip category filtering since we're not joining tables
-    let filteredPosts = posts || [];
-
-    const results: any = {
-      success: true,
-      totalPosts: 0, // จะคำนวณใหม่ด้านล่าง
-      totalPages: 0,
-      currentPage: safePage,
-      limit: safeLimit,
-      posts: filteredPosts,
-    };
-
-    // นับจำนวน posts ทั้งหมดด้วย Supabase
-    let countQuery = supabase
+    // Get total count
+    const { count, error: countError } = await supabase
       .from("posts")
       .select("id", { count: "exact" })
       .eq("status_id", 2);
 
-    // if (category) {
-    //   countQuery = countQuery.ilike("categories.name", `%${category}%`);
-    // }
-
-    if (keyword) {
-      countQuery = countQuery.or(`title.ilike.%${keyword}%,description.ilike.%${keyword}%,content.ilike.%${keyword}%`);
-    }
-
-    const { count, error: countError } = await countQuery;
     if (countError) {
-      throw new DatabaseError("Failed to count posts");
+      console.error("Count error:", countError);
+      throw new DatabaseError(`Failed to count posts: ${countError.message}`);
     }
 
     const totalPosts = count || 0;
-    results.totalPosts = totalPosts;
-    results.totalPages = Math.ceil(totalPosts / safeLimit);
-    
-    if (offset + safeLimit < totalPosts) {
-      results.nextPage = safePage + 1;
-    }
-    if (offset > 0) {
-      results.previousPage = safePage - 1;
-    }
-    
-    return res.status(200).json(results);
+    const totalPages = Math.ceil(totalPosts / safeLimit);
+
+    return res.status(200).json({
+      success: true,
+      totalPosts,
+      totalPages,
+      currentPage: safePage,
+      limit: safeLimit,
+      posts: posts || [],
+      nextPage: safePage < totalPages ? safePage + 1 : null,
+      previousPage: safePage > 1 ? safePage - 1 : null
+    });
   } catch (error) {
+    console.error("Route error:", error);
     throw new DatabaseError("Failed to fetch posts");
   }
 }));
