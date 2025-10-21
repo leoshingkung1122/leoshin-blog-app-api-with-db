@@ -52,8 +52,8 @@ function validatePostData(req: Request, res: Response, next: NextFunction) {
     errors.push("Image must be a string URL");
   }
 
-  if (category_id !== undefined && typeof category_id !== "number") {
-    errors.push("Category ID must be a number");
+  if (category_id !== undefined && typeof category_id !== "number" && typeof category_id !== "string") {
+    errors.push("Category ID must be a number or string");
   }
 
   if (description && typeof description !== "string") {
@@ -64,8 +64,8 @@ function validatePostData(req: Request, res: Response, next: NextFunction) {
     errors.push("Content must be a string");
   }
 
-  if (status_id !== undefined && typeof status_id !== "number") {
-    errors.push("Status ID must be a number");
+  if (status_id !== undefined && typeof status_id !== "number" && typeof status_id !== "string") {
+    errors.push("Status ID must be a number or string");
   }
 
   // Additional validations
@@ -77,11 +77,11 @@ function validatePostData(req: Request, res: Response, next: NextFunction) {
     errors.push("Description must be less than 500 characters");
   }
 
-  if (category_id && (category_id < 1 || !Number.isInteger(category_id))) {
+  if (category_id && (Number(category_id) < 1 || !Number.isInteger(Number(category_id)))) {
     errors.push("Category ID must be a positive integer");
   }
 
-  if (status_id && (status_id < 1 || !Number.isInteger(status_id))) {
+  if (status_id && (Number(status_id) < 1 || !Number.isInteger(Number(status_id)))) {
     errors.push("Status ID must be a positive integer");
   }
 
