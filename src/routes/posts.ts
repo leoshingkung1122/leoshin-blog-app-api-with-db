@@ -16,13 +16,14 @@ router.post("/", protectAdmin, validatePostData, asyncHandler(async (req: Reques
   const supabaseRls = createSupabaseRlsHelper(accessToken);
 
   try {
-    const result = await supabaseRls.insert("posts", {
+    const result = await supabaseRls.insert("blog_posts", {
       title: newPost.title,
       image: newPost.image,
       category_id: newPost.category_id,
       description: newPost.description,
       content: newPost.content,
       status_id: newPost.status_id,
+      published_at: newPost.status_id === 1 ? new Date() : null, // Set published_at if published
     });
 
     return res.status(201).json({ 
@@ -44,19 +45,72 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
 
   const safePage = Math.max(1, page);
   const safeLimit = Math.max(1, Math.min(100, limit));
+  const offset = (safePage - 1) * safeLimit;
+
+  // ใช้ Supabase client สำหรับ public route
+  const supabase = getSupabase();
 
   try {
-    // For now, return empty posts to fix the 500 error
-    // We'll debug the Supabase connection later
+    // Query using correct table name: blog_posts
+    let supabaseQuery = supabase
+      .from("blog_posts")
+      .select(`
+        *,
+        categories(name),
+        post_status(name)
+      `)
+      .eq("status_id", 1) // Published posts (status_id = 1 for Published)
+      .order("published_at", { ascending: false })
+      .range(offset, offset + safeLimit - 1);
+
+    // Apply keyword search
+    if (keyword) {
+      supabaseQuery = supabaseQuery.or(`title.ilike.%${keyword}%,description.ilike.%${keyword}%,content.ilike.%${keyword}%`);
+    }
+
+    const { data: posts, error } = await supabaseQuery;
+
+    if (error) {
+      console.error("Supabase error:", error);
+      throw new DatabaseError(`Failed to fetch posts: ${error.message}`);
+    }
+
+    // Filter by category if needed (post-processing)
+    let filteredPosts = posts || [];
+    if (category) {
+      filteredPosts = filteredPosts.filter((post: any) => 
+        post.categories?.name?.toLowerCase().includes(category.toLowerCase())
+      );
+    }
+
+    // Get total count
+    let countQuery = supabase
+      .from("blog_posts")
+      .select("id", { count: "exact" })
+      .eq("status_id", 1);
+
+    if (keyword) {
+      countQuery = countQuery.or(`title.ilike.%${keyword}%,description.ilike.%${keyword}%,content.ilike.%${keyword}%`);
+    }
+
+    const { count, error: countError } = await countQuery;
+    if (countError) {
+      console.error("Count error:", countError);
+      throw new DatabaseError(`Failed to count posts: ${countError.message}`);
+    }
+
+    const totalPosts = count || 0;
+    const totalPages = Math.ceil(totalPosts / safeLimit);
+
     return res.status(200).json({
       success: true,
-      totalPosts: 0,
-      totalPages: 0,
+      totalPosts,
+      totalPages,
       currentPage: safePage,
       limit: safeLimit,
-      posts: [],
-      nextPage: null,
-      previousPage: null
+      posts: filteredPosts,
+      nextPage: safePage < totalPages ? safePage + 1 : null,
+      previousPage: safePage > 1 ? safePage - 1 : null
     });
   } catch (error) {
     console.error("Route error:", error);
@@ -76,19 +130,24 @@ router.get("/:postId", asyncHandler(async (req: Request, res: Response) => {
   const supabase = getSupabase();
   
   try {
-    const { data: posts, error } = await supabase
-      .from("posts")
-      .select("*")
+    const { data: post, error } = await supabase
+      .from("blog_posts")
+      .select(`
+        *,
+        categories(name),
+        post_status(name)
+      `)
       .eq("id", postIdFromClient)
+      .eq("status_id", 1) // Only published posts
       .single();
 
-    if (error || !posts) {
+    if (error || !post) {
       throw new NotFoundError("Post", postIdFromClient);
     }
 
     return res.status(200).json({
       success: true,
-      data: posts,
+      data: post,
     });
   } catch (error) {
     if (error instanceof NotFoundError) {
@@ -113,7 +172,7 @@ router.put("/:postId", protectAdmin, validatePostData, asyncHandler(async (req: 
 
   try {
     const result = await supabaseRls.update(
-      "posts",
+      "blog_posts",
       {
         title: updatedPost.title,
         image: updatedPost.image,
@@ -121,7 +180,8 @@ router.put("/:postId", protectAdmin, validatePostData, asyncHandler(async (req: 
         description: updatedPost.description,
         content: updatedPost.content,
         status_id: updatedPost.status_id,
-        date: updatedPost.date,
+        published_at: updatedPost.status_id === 1 ? new Date() : null, // Set published_at if published
+        updated_at: new Date(),
       },
       { id: postIdFromClient }
     );
@@ -163,18 +223,22 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
     
     if (status) {
       if (status.toLowerCase() === 'published') {
-        filters.status_id = 2;
+        filters.status_id = 1; // Published = 1
       } else if (status.toLowerCase() === 'draft') {
-        filters.status_id = 1;
+        filters.status_id = 2; // Draft = 2
       }
     }
 
     // Get posts with basic filters
     const supabase = getSupabase();
     let supabaseQuery = supabase
-      .from("posts")
-      .select(query)
-      .order("date", { ascending: false })
+      .from("blog_posts")
+      .select(`
+        *,
+        categories(name),
+        post_status(name)
+      `)
+      .order("created_at", { ascending: false })
       .range(offset, offset + safeLimit - 1);
 
     // Apply status filter
@@ -198,7 +262,7 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
 
     // Get total count for pagination
     let countQuery = supabase
-      .from("posts")
+      .from("blog_posts")
       .select("id", { count: "exact" });
 
     if (filters.status_id) {
@@ -248,8 +312,12 @@ router.get("/admin/:postId", protectAdmin, asyncHandler(async (req: Request, res
   
   try {
     const { data: post, error } = await supabase
-      .from("posts")
-      .select("*")
+      .from("blog_posts")
+      .select(`
+        *,
+        categories(id, name),
+        post_status(id, name)
+      `)
       .eq("id", postIdFromClient)
       .single();
 
@@ -276,20 +344,20 @@ router.get("/stats", protectAdmin, asyncHandler(async (req: Request, res: Respon
   try {
     // Get total posts count
     const { count: totalPosts } = await supabase
-      .from("posts")
+      .from("blog_posts")
       .select("id", { count: "exact" });
 
     // Get published posts count
     const { count: publishedPosts } = await supabase
-      .from("posts")
+      .from("blog_posts")
       .select("id", { count: "exact" })
-      .eq("status_id", 2);
+      .eq("status_id", 1); // Published = 1
 
     // Get draft posts count
     const { count: draftPosts } = await supabase
-      .from("posts")
+      .from("blog_posts")
       .select("id", { count: "exact" })
-      .eq("status_id", 1);
+      .eq("status_id", 2); // Draft = 2
 
     // Get total categories count
     const { count: totalCategories } = await supabase
@@ -334,7 +402,7 @@ router.delete("/:postId", protectAdmin, asyncHandler(async (req: Request, res: R
   const supabaseRls = createSupabaseRlsHelper(accessToken);
 
   try {
-    const result = await supabaseRls.delete("posts", { id: postIdFromClient });
+    const result = await supabaseRls.delete("blog_posts", { id: postIdFromClient });
 
     return res.status(200).json({
       success: true,
