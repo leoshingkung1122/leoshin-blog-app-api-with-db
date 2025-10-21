@@ -126,14 +126,10 @@ router.put("/:categoryId", protectAdmin, asyncHandler(async (req: Request, res: 
     }
 
     // Check if another category with the same name exists (excluding current category)
-    const supabase = getSupabase();
-    const { data: duplicateCategories } = await supabase
-      .from("categories")
-      .select("*")
-      .eq("name", name.trim())
-      .neq("id", categoryId);
+    const duplicateCategories = await supabaseRls.select("categories", "*", { name: name.trim() });
+    const filteredDuplicates = duplicateCategories?.filter(cat => cat.id !== Number(categoryId)) || [];
 
-    if (duplicateCategories && duplicateCategories.length > 0) {
+    if (filteredDuplicates.length > 0) {
       return res.status(400).json({ 
         success: false,
         error: "Category with this name already exists" 
@@ -179,7 +175,7 @@ router.delete("/:categoryId", protectAdmin, asyncHandler(async (req: Request, re
     }
 
     // Check if category is being used by any posts
-    const postsWithCategory = await supabaseRls.select("posts", "id", { category_id: categoryId });
+    const postsWithCategory = await supabaseRls.select("blog_posts", "id", { category_id: categoryId });
     if (postsWithCategory && postsWithCategory.length > 0) {
       return res.status(400).json({ 
         success: false,

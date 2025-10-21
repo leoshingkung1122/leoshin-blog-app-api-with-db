@@ -36,17 +36,10 @@ router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asy
   try {
     let imageUrl = newPost.image; // Default to provided image URL
 
-    // If image file is uploaded, upload it to Supabase Storage
+    // If image file is uploaded, convert to base64 like profiles API
     if (imageFile) {
-      const fileName = `post-${Date.now()}-${imageFile.originalname}`;
-      const uploadResult = await supabaseRls.uploadFile(
-        'post-images',
-        fileName,
-        imageFile.buffer,
-        imageFile.mimetype
-      );
-
-      imageUrl = uploadResult.path;
+      const base64Image = imageFile.buffer.toString('base64');
+      imageUrl = `data:${imageFile.mimetype};base64,${base64Image}`;
     }
 
     // Generate slug from title
@@ -115,32 +108,10 @@ router.put("/:postId", protectAdmin, upload.single('imageFile'), validatePostDat
 
     let imageUrl = updatedPost.image || (existingPost[0] as any).image; // Keep existing image if no new one provided
 
-    // If new image file is uploaded, upload it and delete the old one
+    // If new image file is uploaded, convert to base64 like profiles API
     if (imageFile) {
-      const fileName = `post-${postId}-${Date.now()}-${imageFile.originalname}`;
-      const uploadResult = await supabaseRls.uploadFile(
-        'post-images',
-        fileName,
-        imageFile.buffer,
-        imageFile.mimetype
-      );
-
-      imageUrl = uploadResult.path;
-
-      // Delete old image if it exists and is not a placeholder
-      const oldImageUrl = (existingPost[0] as any).image;
-      if (oldImageUrl && !oldImageUrl.includes('via.placeholder.com') && !oldImageUrl.includes('default')) {
-        try {
-          // Extract filename from old image URL
-          const oldFileName = oldImageUrl.split('/').pop();
-          if (oldFileName) {
-            await supabaseRls.deleteFile('post-images', oldFileName);
-          }
-        } catch (deleteError) {
-          console.warn("Failed to delete old image:", deleteError);
-          // Don't throw error, just log warning
-        }
-      }
+      const base64Image = imageFile.buffer.toString('base64');
+      imageUrl = `data:${imageFile.mimetype};base64,${base64Image}`;
     }
 
     // Generate slug from title
@@ -193,46 +164,44 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
   const safeLimit = Math.max(1, Math.min(100, limit));
   const offset = (safePage - 1) * safeLimit;
 
-  const supabase = getSupabase();
+  const supabaseRls = createSupabaseRlsHelper(accessToken);
 
   try {
-    let supabaseQuery = supabase
-      .from("blog_posts")
-      .select(`
-        id,
-        title,
-        description,
-        content,
-        categories(name),
-        post_status(name),
-        created_at,
-        updated_at
-      `)
-      .order("created_at", { ascending: false });
+    // Use RLS helper to ensure proper authentication
+    const posts = await supabaseRls.select("blog_posts", `
+      id,
+      title,
+      description,
+      content,
+      categories(name),
+      post_status(name),
+      created_at,
+      updated_at
+    `, {}, {
+      orderBy: "created_at:desc"
+    });
 
     // Apply status filter
+    let filteredPosts = posts;
     if (status) {
       if (status.toLowerCase() === 'published') {
-        supabaseQuery = supabaseQuery.eq("status_id", 1);
+        filteredPosts = posts.filter((post: any) => post.status_id === 1);
       } else if (status.toLowerCase() === 'draft') {
-        supabaseQuery = supabaseQuery.eq("status_id", 2);
+        filteredPosts = posts.filter((post: any) => post.status_id === 2);
       }
     }
 
     // Apply keyword search
     if (keyword) {
-      supabaseQuery = supabaseQuery.or(`title.ilike.%${keyword}%,description.ilike.%${keyword}%,content.ilike.%${keyword}%`);
-    }
-
-    const { data: posts, error } = await supabaseQuery;
-
-    if (error) {
-      console.error("Admin posts query error:", error);
-      throw new DatabaseError("Failed to fetch posts");
+      filteredPosts = filteredPosts.filter((post: any) => 
+        post.title.toLowerCase().includes(keyword.toLowerCase()) ||
+        post.description.toLowerCase().includes(keyword.toLowerCase()) ||
+        post.content.toLowerCase().includes(keyword.toLowerCase())
+      );
     }
 
     // Transform data to match frontend expectations
-    const transformedPosts = (posts || []).map((post: any) => ({
+    const transformedPosts = filteredPosts.map((post: any) => ({
       id: post.id,
       title: post.title,
       description: post.description,
@@ -242,17 +211,17 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
     }));
 
     // Filter by category if needed (post-processing)
-    let filteredPosts = transformedPosts;
+    let finalPosts = transformedPosts;
     if (category) {
-      filteredPosts = filteredPosts.filter((post: any) => 
+      finalPosts = transformedPosts.filter((post: any) => 
         post.category.toLowerCase().includes(category.toLowerCase())
       );
     }
 
     return res.status(200).json({
       success: true,
-      posts: filteredPosts,
-      totalPosts: filteredPosts.length
+      posts: finalPosts,
+      totalPosts: finalPosts.length
     });
   } catch (error) {
     console.error("Admin posts route error:", error);
@@ -262,35 +231,29 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
 
 // GET /posts/stats - Get dashboard statistics (admin only)
 router.get("/stats", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const supabase = getSupabase();
+  const accessToken = (req as any).accessToken;
+  const supabaseRls = createSupabaseRlsHelper(accessToken);
 
   try {
     // Get total posts count
-    const { count: totalPosts } = await supabase
-      .from("blog_posts")
-      .select("id", { count: "exact" });
+    const totalPosts = await supabaseRls.select("blog_posts", "id");
+    const totalPostsCount = totalPosts ? totalPosts.length : 0;
 
     // Get published posts count
-    const { count: publishedPosts } = await supabase
-      .from("blog_posts")
-      .select("id", { count: "exact" })
-      .eq("status_id", 1); // Published = 1
+    const publishedPosts = await supabaseRls.select("blog_posts", "id", { status_id: 1 });
+    const publishedPostsCount = publishedPosts ? publishedPosts.length : 0;
 
     // Get draft posts count
-    const { count: draftPosts } = await supabase
-      .from("blog_posts")
-      .select("id", { count: "exact" })
-      .eq("status_id", 2); // Draft = 2
+    const draftPosts = await supabaseRls.select("blog_posts", "id", { status_id: 2 });
+    const draftPostsCount = draftPosts ? draftPosts.length : 0;
 
     // Get total categories count
-    const { count: totalCategories } = await supabase
-      .from("categories")
-      .select("id", { count: "exact" });
+    const totalCategories = await supabaseRls.select("categories", "id");
+    const totalCategoriesCount = totalCategories ? totalCategories.length : 0;
 
     // Get total users count
-    const { count: totalUsers } = await supabase
-      .from("users")
-      .select("id", { count: "exact" });
+    const totalUsers = await supabaseRls.select("users", "id");
+    const totalUsersCount = totalUsers ? totalUsers.length : 0;
 
     // Get total comments count (if you have a comments table)
     // For now, we'll set it to 0 since we don't have a comments table yet
@@ -299,15 +262,16 @@ router.get("/stats", protectAdmin, asyncHandler(async (req: Request, res: Respon
     return res.status(200).json({
       success: true,
       data: {
-        totalPosts: totalPosts || 0,
-        publishedPosts: publishedPosts || 0,
-        draftPosts: draftPosts || 0,
-        totalCategories: totalCategories || 0,
-        totalUsers: totalUsers || 0,
+        totalPosts: totalPostsCount,
+        publishedPosts: publishedPostsCount,
+        draftPosts: draftPostsCount,
+        totalCategories: totalCategoriesCount,
+        totalUsers: totalUsersCount,
         totalComments: totalComments
       }
     });
   } catch (error) {
+    console.error("Stats API error:", error);
     throw new DatabaseError("Failed to fetch statistics");
   }
 }));
@@ -322,26 +286,22 @@ router.get("/admin/:postId", protectAdmin, asyncHandler(async (req: Request, res
     throw new ValidationError("Invalid post ID");
   }
 
-  const supabase = getSupabase();
+  const supabaseRls = createSupabaseRlsHelper(accessToken);
   
   try {
-    const { data: post, error } = await supabase
-      .from("blog_posts")
-      .select(`
-        *,
-        categories(id, name),
-        post_status(id, name)
-      `)
-      .eq("id", postIdFromClient)
-      .single();
+    const posts = await supabaseRls.select("blog_posts", `
+      *,
+      categories(id, name),
+      post_status(id, name)
+    `, { id: postIdFromClient });
 
-    if (error || !post) {
+    if (!posts || posts.length === 0) {
       throw new NotFoundError("Post", postIdFromClient);
     }
 
     return res.status(200).json({
       success: true,
-      data: post,
+      data: posts[0],
     });
   } catch (error) {
     if (error instanceof NotFoundError) {
@@ -362,7 +322,7 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const safeLimit = Math.max(1, Math.min(100, limit));
   const offset = (safePage - 1) * safeLimit;
 
-  // ใช้ Supabase client สำหรับ public route
+  // ใช้ Supabase client สำหรับ public route (ไม่ต้องใช้ RLS เพราะเป็น public data)
   const supabase = getSupabase();
 
   try {
@@ -442,6 +402,7 @@ router.get("/:postId", asyncHandler(async (req: Request, res: Response) => {
     throw new ValidationError("Invalid post ID");
   }
 
+  // ใช้ Supabase client สำหรับ public route (ไม่ต้องใช้ RLS เพราะเป็น public data)
   const supabase = getSupabase();
   
   try {
