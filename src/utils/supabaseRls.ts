@@ -114,35 +114,33 @@ export class SupabaseRlsHelper {
   async delete(table: string, filters: Record<string, any>) {
     console.log(`🗑️ Attempting to delete from ${table} with filters:`, filters);
     
-    let query = this.supabase.from(table);
-    console.log(`🔍 Initial query type:`, typeof query);
-    console.log(`🔍 Query has eq method:`, typeof (query as any).eq);
-
-    // เพิ่ม filters
-    Object.entries(filters).forEach(([key, value]) => {
-      console.log(`🔧 Applying filter: ${key} = ${value}`);
-      if (typeof (query as any).eq === 'function') {
+    try {
+      // ใช้วิธีที่ถูกต้อง - สร้าง query builder และ chain methods
+      let query = this.supabase.from(table);
+      
+      // เพิ่ม filters โดยใช้ method chaining
+      Object.entries(filters).forEach(([key, value]) => {
+        console.log(`🔧 Applying filter: ${key} = ${value}`);
         query = (query as any).eq(key, value);
-        console.log(`✅ Filter applied successfully`);
-      } else {
-        console.error(`❌ query.eq is not a function! Type:`, typeof (query as any).eq);
-        throw new Error(`query.eq is not a function. Query type: ${typeof query}`);
+      });
+
+      console.log(`🔍 Executing delete query...`);
+      
+      // ทำ delete operation
+      const { data: result, error } = await query.delete().select();
+
+      if (error) {
+        console.error(`❌ Database delete failed for ${table}:`, error);
+        throw new Error(`Database delete failed: ${error.message}`);
       }
-    });
 
-    console.log(`🔍 Final query before delete:`, typeof query);
-    console.log(`🔍 Query has delete method:`, typeof (query as any).delete);
-
-    // ทำ delete operation
-    const { data: result, error } = await (query as any).delete().select();
-
-    if (error) {
-      console.error(`❌ Database delete failed for ${table}:`, error);
-      throw new Error(`Database delete failed: ${error.message}`);
+      console.log(`✅ Successfully deleted from ${table}:`, result);
+      return result && result.length > 0 ? result[0] : null;
+      
+    } catch (error) {
+      console.error(`❌ Error in delete method:`, error);
+      throw error;
     }
-
-    console.log(`✅ Successfully deleted from ${table}:`, result);
-    return result && result.length > 0 ? result[0] : null;
   }
 
   /**
