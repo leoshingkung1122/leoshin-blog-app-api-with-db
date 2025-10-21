@@ -2,8 +2,25 @@ import { Router, Request, Response } from "express";
 import protectUser from "../middleware/protectUser";
 import { asyncHandler } from "../middleware/errorHandler";
 import { createSupabaseRlsHelper } from "../utils/supabaseRls";
+import multer from "multer";
 
 const router = Router();
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.'));
+    }
+  }
+});
 
 // GET /profiles - Get current user profile (Protected)
 router.get("/", protectUser, asyncHandler(async (req: Request, res: Response) => {
@@ -35,29 +52,38 @@ router.get("/", protectUser, asyncHandler(async (req: Request, res: Response) =>
 }));
 
 // PUT /profiles - Update current user profile (Protected)
-router.put("/", protectUser, asyncHandler(async (req: Request, res: Response) => {
+router.put("/", protectUser, upload.single('imageFile'), asyncHandler(async (req: Request, res: Response) => {
   const accessToken = (req as any).accessToken;
   const user = (req as any).user;
-  const { username, name, profile_pic } = req.body;
+  const { username, name } = req.body;
+  const imageFile = req.file;
 
   try {
     const supabaseRls = createSupabaseRlsHelper(accessToken);
     
     // ตรวจสอบว่า username ใหม่ไม่ซ้ำกับคนอื่น (ถ้ามีการเปลี่ยน)
-    if (username && username !== user.username) {
+    if (username && username !== (user as any).username) {
       const existingUsers = await supabaseRls.select("users", "id", { username });
       if (existingUsers && existingUsers.length > 0) {
         return res.status(400).json({ error: "Username is already taken" });
       }
     }
 
+    const updateData: any = {
+      username: username || undefined,
+      name: name || undefined,
+    };
+
+    // ถ้ามีการอัปโหลดรูปภาพใหม่ ให้เก็บเป็น base64 (ชั่วคราว)
+    if (imageFile) {
+      const base64Image = imageFile.buffer.toString('base64');
+      const dataUrl = `data:${imageFile.mimetype};base64,${base64Image}`;
+      updateData.profile_pic = dataUrl;
+    }
+
     const result = await supabaseRls.update(
       "users",
-      {
-        username: username || undefined,
-        name: name || undefined,
-        profile_pic: profile_pic || undefined,
-      },
+      updateData,
       { id: user.id }
     );
 
@@ -67,7 +93,17 @@ router.put("/", protectUser, asyncHandler(async (req: Request, res: Response) =>
       data: result
     });
   } catch (error) {
-    return res.status(500).json({ error: "Internal server error" });
+    console.error("Profile update error:", error);
+    console.error("Error details:", {
+      message: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
+      user: user ? { id: user.id, email: user.email } : "No user data",
+      body: { username, name },
+      hasImageFile: !!imageFile
+    });
+    
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
+    return res.status(500).json({ error: errorMessage });
   }
 }));
 

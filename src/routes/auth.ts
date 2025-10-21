@@ -138,6 +138,64 @@ authRouter.post("/register", async (req: Request, res: Response) => {
       return res.status(500).json({ error: "Internal server error" });
     }
   });
+
+  // POST /auth/reset-password - Reset user password (Protected)
+  authRouter.post("/reset-password", protectUser, async (req: Request, res: Response) => {
+    const { oldPassword, newPassword } = req.body;
+    const user = (req as any).user;
+
+    try {
+      console.log("Reset password request:", {
+        user: user ? { id: user.id, email: user.email } : "No user data",
+        hasOldPassword: !!oldPassword,
+        hasNewPassword: !!newPassword
+      });
+
+      const supabase = getSupabase();
+      
+      // ตรวจสอบรหัสผ่านเก่า
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: oldPassword,
+      });
+
+      if (signInError) {
+        console.log("Sign in error:", signInError.message);
+        return res.status(400).json({ error: "Current password is incorrect" });
+      }
+
+      // อัปเดตรหัสผ่านใหม่
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (updateError) {
+        console.log("Update password error:", updateError.message);
+        return res.status(400).json({ error: "Failed to update password" });
+      }
+
+      console.log("Password updated successfully");
+      return res.status(200).json({
+        success: true,
+        message: "Password updated successfully"
+      });
+    } catch (error) {
+      console.error("Reset password error:", error);
+      console.error("Error details:", {
+        message: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+        user: user ? { id: user.id, email: user.email } : "No user data"
+      });
+      
+      const errorMessage = error instanceof Error ? error.message : "Internal server error";
+      return res.status(500).json({ error: errorMessage });
+    }
+  });
+
+  // Test route to verify auth router is working
+  authRouter.get("/test", (req: Request, res: Response) => {
+    res.json({ message: "Auth router is working!", timestamp: new Date().toISOString() });
+  });
   
   
 export default authRouter;
