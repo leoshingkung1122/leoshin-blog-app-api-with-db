@@ -115,14 +115,26 @@ export class SupabaseRlsHelper {
     console.log(`🗑️ Attempting to delete from ${table} with filters:`, filters);
     
     let query = this.supabase.from(table);
+    console.log(`🔍 Initial query type:`, typeof query);
+    console.log(`🔍 Query has eq method:`, typeof (query as any).eq);
 
     // เพิ่ม filters
     Object.entries(filters).forEach(([key, value]) => {
-      query = (query as any).eq(key, value);
+      console.log(`🔧 Applying filter: ${key} = ${value}`);
+      if (typeof (query as any).eq === 'function') {
+        query = (query as any).eq(key, value);
+        console.log(`✅ Filter applied successfully`);
+      } else {
+        console.error(`❌ query.eq is not a function! Type:`, typeof (query as any).eq);
+        throw new Error(`query.eq is not a function. Query type: ${typeof query}`);
+      }
     });
 
+    console.log(`🔍 Final query before delete:`, typeof query);
+    console.log(`🔍 Query has delete method:`, typeof (query as any).delete);
+
     // ทำ delete operation
-    const { data: result, error } = await query.delete().select();
+    const { data: result, error } = await (query as any).delete().select();
 
     if (error) {
       console.error(`❌ Database delete failed for ${table}:`, error);
