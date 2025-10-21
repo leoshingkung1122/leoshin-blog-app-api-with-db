@@ -127,7 +127,15 @@ router.put("/:categoryId", protectAdmin, asyncHandler(async (req: Request, res: 
 
     // Check if another category with the same name exists (excluding current category)
     const duplicateCategories = await supabaseRls.select("categories", "*", { name: name.trim() });
-    const filteredDuplicates = duplicateCategories?.filter(cat => cat.id !== Number(categoryId)) || [];
+    
+    // Check if duplicateCategories is an error
+    if (duplicateCategories && typeof duplicateCategories === 'object' && 'error' in duplicateCategories) {
+      throw new DatabaseError(`Failed to check duplicate categories: ${duplicateCategories.error}`);
+    }
+    
+    const filteredDuplicates = Array.isArray(duplicateCategories) 
+      ? duplicateCategories.filter((cat: any) => cat.id !== Number(categoryId)) 
+      : [];
 
     if (filteredDuplicates.length > 0) {
       return res.status(400).json({ 
