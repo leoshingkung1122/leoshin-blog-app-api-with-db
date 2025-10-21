@@ -108,13 +108,11 @@ export class SupabaseRlsHelper {
    * ทำ DELETE query ผ่าน Supabase Client
    */
   async delete(table: string, filters: Record<string, any>) {
-    // ใช้วิธีง่ายๆ โดยสร้าง query string
-    const filterEntries = Object.entries(filters);
     let query = this.supabase.from(table);
 
     // เพิ่ม filters
-    filterEntries.forEach(([key, value]) => {
-      (query as any).eq(key, value);
+    Object.entries(filters).forEach(([key, value]) => {
+      query = (query as any).eq(key, value);
     });
 
     // ทำ delete operation

@@ -182,15 +182,22 @@ router.delete("/:categoryId", protectAdmin, asyncHandler(async (req: Request, re
       throw new NotFoundError("Category", categoryId);
     }
 
-    // Check if category is being used by any posts
-    const postsWithCategory = await supabaseRls.select("blog_posts", "id", { category_id: categoryId });
+    // Get all posts with this category to delete them first
+    const postsWithCategory = await supabaseRls.select("blog_posts", "*", { category_id: categoryId });
+    
+    // Delete all posts with this category first (cascading delete)
     if (postsWithCategory && postsWithCategory.length > 0) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Cannot delete category that is being used by posts" 
-      });
+      for (const post of postsWithCategory) {
+        // Delete related comments first
+        await supabaseRls.delete("comments", { post_id: (post as any).id });
+        // Delete related post_likes
+        await supabaseRls.delete("post_likes", { post_id: (post as any).id });
+        // Delete the post
+        await supabaseRls.delete("blog_posts", { id: (post as any).id });
+      }
     }
 
+    // Now delete the category
     const result = await supabaseRls.delete("categories", { id: categoryId });
 
     return res.status(200).json({
