@@ -118,11 +118,12 @@ export class SupabaseRlsHelper {
       // ใช้วิธีที่ถูกต้อง - สร้าง query builder และ chain methods
       let query = this.supabase.from(table);
       
-      // เพิ่ม filters โดยใช้ method chaining
-      Object.entries(filters).forEach(([key, value]) => {
+      // เพิ่ม filters โดยใช้ method chaining - ใช้ for...of แทน forEach
+      for (const [key, value] of Object.entries(filters)) {
         console.log(`🔧 Applying filter: ${key} = ${value}`);
         query = (query as any).eq(key, value);
-      });
+        console.log(`✅ Filter applied: ${key} = ${value}`);
+      }
 
       console.log(`🔍 Executing delete query...`);
       
