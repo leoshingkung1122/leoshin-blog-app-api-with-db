@@ -265,25 +265,32 @@ router.post("/upload-image", protectAdmin, upload.single('image'), asyncHandler(
         const supabaseRls = createSupabaseRlsHelper(accessToken);
         const bucketName = "post-images";
         const fileName = `post-${Date.now()}-${file.originalname}`;
+        const filePath = `public/${fileName}`;
 
         // Upload file to Supabase Storage
-        const { data, error } = await supabaseRls.uploadFile(bucketName, fileName, file.buffer, file.mimetype);
+        const { data, error } = await supabaseRls.supabase.storage
+            .from(bucketName)
+            .upload(filePath, file.buffer, {
+                contentType: file.mimetype,
+                upsert: false
+            });
 
         if (error) {
-            throw new DatabaseError(`Failed to upload image: ${error}`);
+            throw new DatabaseError(`Failed to upload image: ${error.message}`);
         }
 
         // Get public URL
-        const publicUrl = await supabaseRls.getPublicUrl(bucketName, fileName);
+        const { data: publicURLData } = supabaseRls.supabase.storage
+            .from(bucketName)
+            .getPublicUrl(filePath);
 
         return res.status(200).json({ 
             success: true, 
-            imageUrl: publicUrl,
+            imageUrl: publicURLData.publicUrl,
             fileName: fileName
         });
 
     } catch (error) {
-        console.error("Error uploading image:", error);
         if (error instanceof DatabaseError) {
             throw error;
         }
@@ -511,30 +518,6 @@ router.delete("/:postId", protectAdmin, asyncHandler(async (req: Request, res: R
   } catch (error) {
     throw new DatabaseError("Failed to delete post");
   }
-}));
-
-// DELETE /posts/storage/delete/:fileName - Delete a file from storage
-router.delete("/storage/delete/:fileName", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const { fileName } = req.params;
-    const accessToken = (req as any).accessToken;
-    const supabaseRls = createSupabaseRlsHelper(accessToken);
-
-    if (!fileName) {
-        return res.status(400).json({ success: false, error: "fileName is required." });
-    }
-
-    try {
-        const bucketName = "post-images";
-        await supabaseRls.deleteFile(bucketName, fileName);
-        return res.status(200).json({ success: true, message: "File deleted successfully." });
-
-    } catch (error) {
-        console.error("Error deleting file:", error);
-        if (error instanceof DatabaseError) {
-            throw error;
-        }
-        throw new DatabaseError("Failed to delete file.");
-    }
 }));
 
 export default router;
