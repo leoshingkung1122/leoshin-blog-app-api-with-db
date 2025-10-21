@@ -36,10 +36,28 @@ router.post("/", protectAdmin, upload.single('imageFile'), validatePostData, asy
   try {
     let imageUrl = newPost.image; // Default to provided image URL
 
-    // If image file is uploaded, convert to base64 like profiles API
+    // If image file is uploaded, upload it to Supabase Storage
     if (imageFile) {
-      const base64Image = imageFile.buffer.toString('base64');
-      imageUrl = `data:${imageFile.mimetype};base64,${base64Image}`;
+      // กำหนด bucket และ path ที่จะเก็บไฟล์ใน Supabase
+      const bucketName = "post-images";
+      const fileName = `post-${Date.now()}-${imageFile.originalname}`;
+      
+      // อัปโหลดไฟล์ไปยัง Supabase Storage
+      const { data, error } = await supabaseRls.uploadFile(
+        bucketName,
+        fileName,
+        imageFile.buffer,
+        imageFile.mimetype
+      );
+
+      if (error) {
+        throw new Error(`File upload failed: ${error}`);
+      }
+
+      // ดึง URL สาธารณะของไฟล์ที่อัปโหลด
+      const publicUrl = await supabaseRls.getPublicUrl(bucketName, data.path);
+
+      imageUrl = publicUrl;
     }
 
     // Generate slug from title
@@ -108,10 +126,43 @@ router.put("/:postId", protectAdmin, upload.single('imageFile'), validatePostDat
 
     let imageUrl = updatedPost.image || (existingPost[0] as any).image; // Keep existing image if no new one provided
 
-    // If new image file is uploaded, convert to base64 like profiles API
+    // If new image file is uploaded, upload it to Supabase Storage
     if (imageFile) {
-      const base64Image = imageFile.buffer.toString('base64');
-      imageUrl = `data:${imageFile.mimetype};base64,${base64Image}`;
+      // กำหนด bucket และ path ที่จะเก็บไฟล์ใน Supabase
+      const bucketName = "post-images";
+      const fileName = `post-${postId}-${Date.now()}-${imageFile.originalname}`;
+      
+      // อัปโหลดไฟล์ไปยัง Supabase Storage
+      const { data, error } = await supabaseRls.uploadFile(
+        bucketName,
+        fileName,
+        imageFile.buffer,
+        imageFile.mimetype
+      );
+
+      if (error) {
+        throw new Error(`File upload failed: ${error}`);
+      }
+
+      // ดึง URL สาธารณะของไฟล์ที่อัปโหลด
+      const publicUrl = await supabaseRls.getPublicUrl(bucketName, data.path);
+
+      imageUrl = publicUrl;
+
+      // ลบรูปภาพเก่าถ้ามี (ถ้าไม่ใช่ placeholder)
+      const oldImageUrl = (existingPost[0] as any).image;
+      if (oldImageUrl && !oldImageUrl.includes('via.placeholder.com') && !oldImageUrl.includes('default')) {
+        try {
+          // Extract filename from old image URL
+          const oldFileName = oldImageUrl.split('/').pop();
+          if (oldFileName) {
+            await supabaseRls.deleteFile(bucketName, oldFileName);
+          }
+        } catch (deleteError) {
+          console.warn("Failed to delete old image:", deleteError);
+          // Don't throw error, just log warning
+        }
+      }
     }
 
     // Generate slug from title

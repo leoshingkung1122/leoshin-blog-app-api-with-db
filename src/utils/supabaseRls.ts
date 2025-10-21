@@ -160,11 +160,22 @@ export class SupabaseRlsHelper {
       }
 
       console.log("File uploaded successfully:", data);
-      return data;
+      return { data, error: null };
     } catch (err) {
       console.error("Upload file error:", err);
       throw err;
     }
+  }
+
+  /**
+   * ดึง URL สาธารณะของไฟล์จาก Supabase Storage
+   */
+  async getPublicUrl(bucket: string, path: string) {
+    const { data } = this.supabase.storage
+      .from(bucket)
+      .getPublicUrl(path);
+
+    return data.publicUrl;
   }
 
   /**
@@ -181,7 +192,6 @@ export class SupabaseRlsHelper {
 
     return true;
   }
-
   /**
    * ดึงข้อมูลผู้ใช้ปัจจุบันจาก auth.uid()
    */
