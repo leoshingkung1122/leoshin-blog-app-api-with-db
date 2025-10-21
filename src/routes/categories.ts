@@ -202,22 +202,29 @@ router.delete("/:categoryId", protectAdmin, asyncHandler(async (req: Request, re
     throw new ValidationError("Invalid category ID");
   }
 
+  console.log(`🚀 Starting delete operation for category ID: ${categoryId}`);
+  
   // Use Admin helper for delete operations (bypass RLS)
   const supabaseAdmin = createSupabaseAdminHelper();
 
   try {
+    console.log(`🔍 Step 1: Checking if category ${categoryId} exists`);
     // Check if category exists
     const existingCategory = await supabaseAdmin.select("categories", "*", { id: categoryId });
     if (!existingCategory || existingCategory.length === 0) {
       throw new NotFoundError("Category", categoryId);
     }
 
+    console.log(`📄 Step 2: Getting posts with category ${categoryId}`);
     // Get all posts with this category to clean up related data first
     const postsWithCategory = await supabaseAdmin.select("blog_posts", "*", { category_id: categoryId });
+    
+    console.log(`Found ${postsWithCategory?.length || 0} posts with this category`);
     
     // Clean up related data for posts in this category (comments and post_likes)
     if (postsWithCategory && postsWithCategory.length > 0) {
       for (const post of postsWithCategory) {
+        console.log(`🧹 Cleaning up data for post ${(post as any).id}`);
         // Delete related comments first
         await supabaseAdmin.delete("comments", { post_id: (post as any).id });
         // Delete related post_likes
@@ -226,8 +233,11 @@ router.delete("/:categoryId", protectAdmin, asyncHandler(async (req: Request, re
       }
     }
 
+    console.log(`🗂️ Step 3: Deleting category ${categoryId}`);
     // Now delete the category (posts will be deleted automatically due to CASCADE)
     const result = await supabaseAdmin.delete("categories", { id: categoryId });
+    
+    console.log(`✅ Category deletion completed successfully:`, result);
 
     return res.status(200).json({
       success: true,

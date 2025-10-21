@@ -507,18 +507,25 @@ router.delete("/:postId", protectAdmin, asyncHandler(async (req: Request, res: R
     throw new ValidationError("Invalid post ID");
   }
 
+  console.log(`🚀 Starting delete operation for post ID: ${postIdFromClient}`);
+  
   // Use Admin helper for delete operations (bypass RLS)
   const supabaseAdmin = createSupabaseAdminHelper();
 
   try {
+    console.log(`📝 Step 1: Deleting comments for post ${postIdFromClient}`);
     // Delete related comments first
     await supabaseAdmin.delete("comments", { post_id: postIdFromClient });
     
+    console.log(`❤️ Step 2: Deleting post_likes for post ${postIdFromClient}`);
     // Delete related post_likes
     await supabaseAdmin.delete("post_likes", { post_id: postIdFromClient });
     
+    console.log(`📄 Step 3: Deleting blog_post ${postIdFromClient}`);
     // Finally delete the post
     const result = await supabaseAdmin.delete("blog_posts", { id: postIdFromClient });
+    
+    console.log(`✅ Post deletion completed successfully:`, result);
 
     return res.status(200).json({
       success: true,

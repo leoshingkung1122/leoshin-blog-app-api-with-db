@@ -44,7 +44,12 @@ export function getSupabaseAdmin(): SupabaseClient {
   const url = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+  console.log("Environment variables check:");
+  console.log("SUPABASE_URL:", url ? "✅ Set" : "❌ Missing");
+  console.log("SUPABASE_SERVICE_ROLE_KEY:", serviceRoleKey ? "✅ Set" : "❌ Missing");
+
   if (!url || !serviceRoleKey) {
+    console.error("Missing environment variables:", { url: !!url, serviceRoleKey: !!serviceRoleKey });
     throw new Error("Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.");
   }
 
@@ -56,6 +61,7 @@ export function getSupabaseAdmin(): SupabaseClient {
     }
   });
 
+  console.log("✅ Supabase Admin client created successfully");
   return supabase;
 }
 

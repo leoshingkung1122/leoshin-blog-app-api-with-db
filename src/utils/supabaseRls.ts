@@ -112,6 +112,8 @@ export class SupabaseRlsHelper {
    * ทำ DELETE query ผ่าน Supabase Client
    */
   async delete(table: string, filters: Record<string, any>) {
+    console.log(`🗑️ Attempting to delete from ${table} with filters:`, filters);
+    
     let query = this.supabase.from(table);
 
     // เพิ่ม filters
@@ -123,9 +125,11 @@ export class SupabaseRlsHelper {
     const { data: result, error } = await query.delete().select();
 
     if (error) {
+      console.error(`❌ Database delete failed for ${table}:`, error);
       throw new Error(`Database delete failed: ${error.message}`);
     }
 
+    console.log(`✅ Successfully deleted from ${table}:`, result);
     return result && result.length > 0 ? result[0] : null;
   }
 
