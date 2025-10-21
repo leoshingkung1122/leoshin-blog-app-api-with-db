@@ -115,16 +115,16 @@ export class SupabaseRlsHelper {
     console.log(`🗑️ Attempting to delete from ${table} with filters:`, filters);
     
     try {
-      // ใช้วิธีที่ง่ายกว่า - สร้าง query builder และใช้ .match()
-      let query = this.supabase.from(table);
+      // ใช้วิธีที่ถูกต้อง - สร้าง select query ก่อน แล้วค่อย delete
+      let query = this.supabase.from(table).select();
       
       // ใช้ .match() เพื่อใส่ filters ทั้งหมดในครั้งเดียว
       query = (query as any).match(filters);
 
       console.log(`🔍 Executing delete query...`);
       
-      // ทำ delete operation
-      const { data: result, error } = await query.delete().select();
+      // ทำ delete operation โดยใช้ delete() method
+      const { data: result, error } = await (query as any).delete();
 
       if (error) {
         console.error(`❌ Database delete failed for ${table}:`, error);
