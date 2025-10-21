@@ -256,23 +256,35 @@ router.get("/stats", protectAdmin, asyncHandler(async (req: Request, res: Respon
 router.post("/signed-url", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { fileName, fileType } = req.body;
     const accessToken = (req as any).accessToken;
-    const supabaseRls = createSupabaseRlsHelper(accessToken);
+    
+    console.log("Signed URL request:", { fileName, fileType, hasAccessToken: !!accessToken });
 
     if (!fileName || !fileType) {
+        console.error("Missing required fields:", { fileName, fileType });
         return res.status(400).json({ success: false, error: "fileName and fileType are required." });
     }
 
+    if (!accessToken) {
+        console.error("No access token provided");
+        return res.status(401).json({ success: false, error: "Access token is required." });
+    }
+
     try {
+        const supabaseRls = createSupabaseRlsHelper(accessToken);
         const bucketName = "post-images";
+        
         // Create a unique path for the file to avoid overwriting
         const filePath = `post-${Date.now()}-${fileName}`;
+        console.log("Creating signed URL for:", { bucketName, filePath });
 
         const { data, error } = await supabaseRls.createSignedUploadUrl(bucketName, filePath);
 
         if (error) {
+            console.error("Supabase signed URL error:", error);
             throw new DatabaseError(`Failed to create signed URL: ${error.message}`);
         }
 
+        console.log("Signed URL created successfully:", data);
         // The 'token' in the data is the signed key, and 'path' is the full path for the upload
         return res.status(200).json({ success: true, ...data });
 
