@@ -252,83 +252,42 @@ router.get("/stats", protectAdmin, asyncHandler(async (req: Request, res: Respon
   }
 }));
 
-// POST /posts/signed-url - Generate a signed URL for uploading a file
-router.post("/signed-url", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const { fileName, fileType } = req.body;
+// POST /posts/upload-image - Upload image directly
+router.post("/upload-image", protectAdmin, upload.single('image'), asyncHandler(async (req: Request, res: Response) => {
     const accessToken = (req as any).accessToken;
-    
-    console.log("Signed URL request received:", { fileName, fileType, hasAccessToken: !!accessToken });
+    const file = req.file;
 
-    if (!fileName || !fileType) {
-        console.error("Missing required fields:", { fileName, fileType });
-        return res.status(400).json({ success: false, error: "fileName and fileType are required." });
-    }
-
-    if (!accessToken) {
-        console.error("No access token provided");
-        return res.status(401).json({ success: false, error: "Access token is required." });
+    if (!file) {
+        return res.status(400).json({ success: false, error: "No image file provided." });
     }
 
     try {
-        // Check environment variables
-        console.log("Environment check:", {
-            hasSupabaseUrl: !!process.env.SUPABASE_URL,
-            hasSupabaseAnonKey: !!process.env.SUPABASE_ANON_KEY,
-            supabaseUrl: process.env.SUPABASE_URL?.substring(0, 20) + "..."
-        });
-
         const supabaseRls = createSupabaseRlsHelper(accessToken);
         const bucketName = "post-images";
-        
-        // Create a unique path for the file to avoid overwriting
-        const filePath = `post-${Date.now()}-${fileName}`;
-        console.log("Creating signed URL for:", { bucketName, filePath });
+        const fileName = `post-${Date.now()}-${file.originalname}`;
 
-        // Test bucket access first
-        console.log("Testing bucket access...");
-        const { data: buckets, error: bucketError } = await supabaseRls.supabase.storage.listBuckets();
-        if (bucketError) {
-            console.error("Bucket access error:", bucketError);
-            throw new DatabaseError(`Cannot access Supabase storage: ${bucketError.message}`);
-        }
-        console.log("Available buckets:", buckets?.map(b => b.name));
-
-        // Check if post-images bucket exists, create if not
-        const bucketExists = buckets?.some(bucket => bucket.name === bucketName);
-        if (!bucketExists) {
-            console.log(`Bucket '${bucketName}' does not exist, creating...`);
-            const { data: newBucket, error: createError } = await supabaseRls.supabase.storage.createBucket(bucketName, {
-                public: true,
-                allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
-                fileSizeLimit: 10485760 // 10MB
-            });
-            
-            if (createError) {
-                console.error("Error creating bucket:", createError);
-                throw new DatabaseError(`Failed to create bucket: ${createError.message}`);
-            }
-            console.log("Bucket created successfully:", newBucket);
-        } else {
-            console.log(`Bucket '${bucketName}' exists`);
-        }
-
-        const { data, error } = await supabaseRls.createSignedUploadUrl(bucketName, filePath);
+        // Upload file to Supabase Storage
+        const { data, error } = await supabaseRls.uploadFile(bucketName, fileName, file.buffer, file.mimetype);
 
         if (error) {
-            console.error("Supabase signed URL error:", error);
-            throw new DatabaseError(`Failed to create signed URL: ${error.message}`);
+            throw new DatabaseError(`Failed to upload image: ${error}`);
         }
 
-        console.log("Signed URL created successfully:", { path: data.path, hasToken: !!data.token });
-        // The 'token' in the data is the signed key, and 'path' is the full path for the upload
-        return res.status(200).json({ success: true, ...data });
+        // Get public URL
+        const publicUrl = await supabaseRls.getPublicUrl(bucketName, fileName);
+
+        return res.status(200).json({ 
+            success: true, 
+            imageUrl: publicUrl,
+            fileName: fileName
+        });
 
     } catch (error) {
-        console.error("Error creating signed URL:", error);
+        console.error("Error uploading image:", error);
         if (error instanceof DatabaseError) {
             throw error;
         }
-        throw new DatabaseError("Failed to create signed URL.");
+        throw new DatabaseError("Failed to upload image.");
     }
 }));
 
