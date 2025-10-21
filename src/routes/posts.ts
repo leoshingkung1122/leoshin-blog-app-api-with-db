@@ -36,6 +36,177 @@ router.post("/", protectAdmin, validatePostData, asyncHandler(async (req: Reques
   }
 }));
 
+// GET /posts/admin - Get all posts for admin (including drafts) - MUST BE BEFORE /:postId
+router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const category = req.query.category as string || "";
+  const keyword = req.query.keyword as string || "";
+  const status = req.query.status as string || "";
+  const page = Number(req.query.page) || 1;
+  const limit = Number(req.query.limit) || 10;
+  const accessToken = (req as any).accessToken;
+
+  const safePage = Math.max(1, page);
+  const safeLimit = Math.max(1, Math.min(100, limit));
+  const offset = (safePage - 1) * safeLimit;
+
+  const supabase = getSupabase();
+
+  try {
+    let supabaseQuery = supabase
+      .from("blog_posts")
+      .select(`
+        id,
+        title,
+        description,
+        content,
+        categories(name),
+        post_status(name),
+        created_at,
+        updated_at
+      `)
+      .order("created_at", { ascending: false });
+
+    // Apply status filter
+    if (status) {
+      if (status.toLowerCase() === 'published') {
+        supabaseQuery = supabaseQuery.eq("status_id", 1);
+      } else if (status.toLowerCase() === 'draft') {
+        supabaseQuery = supabaseQuery.eq("status_id", 2);
+      }
+    }
+
+    // Apply keyword search
+    if (keyword) {
+      supabaseQuery = supabaseQuery.or(`title.ilike.%${keyword}%,description.ilike.%${keyword}%,content.ilike.%${keyword}%`);
+    }
+
+    const { data: posts, error } = await supabaseQuery;
+
+    if (error) {
+      console.error("Admin posts query error:", error);
+      throw new DatabaseError("Failed to fetch posts");
+    }
+
+    // Transform data to match frontend expectations
+    const transformedPosts = (posts || []).map((post: any) => ({
+      id: post.id,
+      title: post.title,
+      description: post.description,
+      content: post.content,
+      category: post.categories?.name || 'Uncategorized',
+      status: post.post_status?.name?.toLowerCase() || 'unknown'
+    }));
+
+    // Filter by category if needed (post-processing)
+    let filteredPosts = transformedPosts;
+    if (category) {
+      filteredPosts = filteredPosts.filter((post: any) => 
+        post.category.toLowerCase().includes(category.toLowerCase())
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      posts: filteredPosts,
+      totalPosts: filteredPosts.length
+    });
+  } catch (error) {
+    console.error("Admin posts route error:", error);
+    throw new DatabaseError("Failed to fetch posts");
+  }
+}));
+
+// GET /posts/stats - Get dashboard statistics (admin only)
+router.get("/stats", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const supabase = getSupabase();
+
+  try {
+    // Get total posts count
+    const { count: totalPosts } = await supabase
+      .from("blog_posts")
+      .select("id", { count: "exact" });
+
+    // Get published posts count
+    const { count: publishedPosts } = await supabase
+      .from("blog_posts")
+      .select("id", { count: "exact" })
+      .eq("status_id", 1); // Published = 1
+
+    // Get draft posts count
+    const { count: draftPosts } = await supabase
+      .from("blog_posts")
+      .select("id", { count: "exact" })
+      .eq("status_id", 2); // Draft = 2
+
+    // Get total categories count
+    const { count: totalCategories } = await supabase
+      .from("categories")
+      .select("id", { count: "exact" });
+
+    // Get total users count
+    const { count: totalUsers } = await supabase
+      .from("users")
+      .select("id", { count: "exact" });
+
+    // Get total comments count (if you have a comments table)
+    // For now, we'll set it to 0 since we don't have a comments table yet
+    const totalComments = 0;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        totalPosts: totalPosts || 0,
+        publishedPosts: publishedPosts || 0,
+        draftPosts: draftPosts || 0,
+        totalCategories: totalCategories || 0,
+        totalUsers: totalUsers || 0,
+        totalComments: totalComments
+      }
+    });
+  } catch (error) {
+    throw new DatabaseError("Failed to fetch statistics");
+  }
+}));
+
+// GET /posts/admin/:postId - Get a specific post for admin (including drafts)
+router.get("/admin/:postId", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const postIdFromClient = req.params.postId;
+  const accessToken = (req as any).accessToken;
+
+  // Validate postId parameter
+  if (!postIdFromClient || isNaN(Number(postIdFromClient))) {
+    throw new ValidationError("Invalid post ID");
+  }
+
+  const supabase = getSupabase();
+  
+  try {
+    const { data: post, error } = await supabase
+      .from("blog_posts")
+      .select(`
+        *,
+        categories(id, name),
+        post_status(id, name)
+      `)
+      .eq("id", postIdFromClient)
+      .single();
+
+    if (error || !post) {
+      throw new NotFoundError("Post", postIdFromClient);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: post,
+    });
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new DatabaseError("Failed to fetch post");
+  }
+}));
+
 // GET /posts - Get all posts with pagination and filtering
 router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const category = req.query.category as string || "";
@@ -196,198 +367,6 @@ router.put("/:postId", protectAdmin, validatePostData, asyncHandler(async (req: 
   }
 }));
 
-// GET /posts/admin - Get all posts for admin (including drafts)
-router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const category = req.query.category as string || "";
-  const keyword = req.query.keyword as string || "";
-  const status = req.query.status as string || "";
-  const page = Number(req.query.page) || 1;
-  const limit = Number(req.query.limit) || 10;
-  const accessToken = (req as any).accessToken;
-
-  const safePage = Math.max(1, page);
-  const safeLimit = Math.max(1, Math.min(100, limit));
-  const offset = (safePage - 1) * safeLimit;
-
-  const supabaseRls = createSupabaseRlsHelper(accessToken);
-
-  try {
-    let query = "*";
-
-    // Build filter conditions
-    let filters: any = {};
-    
-    if (category) {
-      // We'll need to filter by category name, so we'll do this in a separate query
-    }
-    
-    if (status) {
-      if (status.toLowerCase() === 'published') {
-        filters.status_id = 1; // Published = 1
-      } else if (status.toLowerCase() === 'draft') {
-        filters.status_id = 2; // Draft = 2
-      }
-    }
-
-    // Get posts with basic filters
-    const supabase = getSupabase();
-    let supabaseQuery = supabase
-      .from("blog_posts")
-      .select(`
-        *,
-        categories(name),
-        post_status(name)
-      `)
-      .order("created_at", { ascending: false })
-      .range(offset, offset + safeLimit - 1);
-
-    // Apply status filter
-    if (filters.status_id) {
-      supabaseQuery = supabaseQuery.eq("status_id", filters.status_id);
-    }
-
-    // Apply keyword search
-    if (keyword) {
-      supabaseQuery = supabaseQuery.or(`title.ilike.%${keyword}%,description.ilike.%${keyword}%,content.ilike.%${keyword}%`);
-    }
-
-    const { data: posts, error } = await supabaseQuery;
-
-    if (error) {
-      throw new DatabaseError("Failed to fetch posts");
-    }
-
-    // For now, skip category filtering
-    let filteredPosts = posts || [];
-
-    // Get total count for pagination
-    let countQuery = supabase
-      .from("blog_posts")
-      .select("id", { count: "exact" });
-
-    if (filters.status_id) {
-      countQuery = countQuery.eq("status_id", filters.status_id);
-    }
-
-    if (keyword) {
-      countQuery = countQuery.or(`title.ilike.%${keyword}%,description.ilike.%${keyword}%,content.ilike.%${keyword}%`);
-    }
-
-    const { count, error: countError } = await countQuery;
-    if (countError) {
-      throw new DatabaseError("Failed to count posts");
-    }
-
-    const totalPosts = count || 0;
-    const totalPages = Math.ceil(totalPosts / safeLimit);
-
-    return res.status(200).json({
-      success: true,
-      posts: filteredPosts,
-      pagination: {
-        totalPosts,
-        totalPages,
-        currentPage: safePage,
-        limit: safeLimit,
-        hasNext: safePage < totalPages,
-        hasPrev: safePage > 1
-      }
-    });
-  } catch (error) {
-    throw new DatabaseError("Failed to fetch posts");
-  }
-}));
-
-// GET /posts/admin/:postId - Get a specific post for admin (including drafts)
-router.get("/admin/:postId", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const postIdFromClient = req.params.postId;
-  const accessToken = (req as any).accessToken;
-
-  // Validate postId parameter
-  if (!postIdFromClient || isNaN(Number(postIdFromClient))) {
-    throw new ValidationError("Invalid post ID");
-  }
-
-  const supabase = getSupabase();
-  
-  try {
-    const { data: post, error } = await supabase
-      .from("blog_posts")
-      .select(`
-        *,
-        categories(id, name),
-        post_status(id, name)
-      `)
-      .eq("id", postIdFromClient)
-      .single();
-
-    if (error || !post) {
-      throw new NotFoundError("Post", postIdFromClient);
-    }
-
-    return res.status(200).json({
-      success: true,
-      data: post,
-    });
-  } catch (error) {
-    if (error instanceof NotFoundError) {
-      throw error;
-    }
-    throw new DatabaseError("Failed to fetch post");
-  }
-}));
-
-// GET /posts/stats - Get dashboard statistics (admin only)
-router.get("/stats", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const supabase = getSupabase();
-
-  try {
-    // Get total posts count
-    const { count: totalPosts } = await supabase
-      .from("blog_posts")
-      .select("id", { count: "exact" });
-
-    // Get published posts count
-    const { count: publishedPosts } = await supabase
-      .from("blog_posts")
-      .select("id", { count: "exact" })
-      .eq("status_id", 1); // Published = 1
-
-    // Get draft posts count
-    const { count: draftPosts } = await supabase
-      .from("blog_posts")
-      .select("id", { count: "exact" })
-      .eq("status_id", 2); // Draft = 2
-
-    // Get total categories count
-    const { count: totalCategories } = await supabase
-      .from("categories")
-      .select("id", { count: "exact" });
-
-    // Get total users count
-    const { count: totalUsers } = await supabase
-      .from("users")
-      .select("id", { count: "exact" });
-
-    // Get total comments count (if you have a comments table)
-    // For now, we'll set it to 0 since we don't have a comments table yet
-    const totalComments = 0;
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        totalPosts: totalPosts || 0,
-        publishedPosts: publishedPosts || 0,
-        draftPosts: draftPosts || 0,
-        totalCategories: totalCategories || 0,
-        totalUsers: totalUsers || 0,
-        totalComments: totalComments
-      }
-    });
-  } catch (error) {
-    throw new DatabaseError("Failed to fetch statistics");
-  }
-}));
 
 // DELETE /posts/:postId - Delete a specific post
 router.delete("/:postId", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
