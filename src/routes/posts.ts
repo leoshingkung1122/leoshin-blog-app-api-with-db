@@ -111,6 +111,7 @@ router.put("/:postId", protectAdmin, validatePostData, asyncHandler(async (req: 
       content: updatedPost.content,
       status_id: Number(updatedPost.status_id), // Convert string to number
       published_at: Number(updatedPost.status_id) === 1 ? new Date() : null,
+      last_edited_by: (req as any).user?.id, // Track who last edited the post
       updated_at: new Date()
     }, { id: postId });
 
@@ -356,6 +357,7 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
         categories(name),
         post_status(name),
         users!author_id(name, username, profile_pic, introduction)
+        last_editor:users!last_edited_by(name, username, profile_pic)
       `)
       .eq("status_id", 1) // Published posts (status_id = 1 for Published)
       .order("published_at", { ascending: false })
@@ -435,7 +437,8 @@ router.get("/:postId", asyncHandler(async (req: Request, res: Response) => {
         *,
         categories(name),
         post_status(name),
-        users!author_id(name, username, profile_pic, introduction)
+        users!author_id(name, username, profile_pic, introduction),
+        last_editor:users!last_edited_by(name, username, profile_pic)
       `)
       .eq("id", postIdFromClient)
       .eq("status_id", 1) // Only published posts
@@ -481,6 +484,7 @@ router.put("/:postId", protectAdmin, validatePostData, asyncHandler(async (req: 
         content: updatedPost.content,
         status_id: updatedPost.status_id,
         published_at: updatedPost.status_id === 1 ? new Date() : null, // Set published_at if published
+        last_edited_by: (req as any).user?.id, // Track who last edited the post
         updated_at: new Date(),
       },
       { id: postIdFromClient }
