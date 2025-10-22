@@ -68,11 +68,12 @@ router.get("/:postId", asyncHandler(async (req: Request, res: Response) => {
           id,
           name,
           username,
-          profile_pic
+          profile_pic,
+          role
         )
       `)
       .eq("post_id", postId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (error) {
