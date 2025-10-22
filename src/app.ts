@@ -5,6 +5,8 @@ import postsRouter from "./routes/posts";
 import profilesRouter from "./routes/profiles";
 import authRouter from "./routes/auth";
 import categoriesRouter from "./routes/categories";
+import commentsRouter from "./routes/comments";
+import likesRouter from "./routes/likes";
 
 const app = express();
 const port: number = parseInt(process.env.PORT || "4001", 10);
@@ -27,6 +29,8 @@ app.use("/posts", postsRouter);
 app.use("/profiles", profilesRouter);
 app.use("/auth", authRouter);
 app.use("/categories", categoriesRouter);
+app.use("/comments", commentsRouter);
+app.use("/likes", likesRouter);
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);
