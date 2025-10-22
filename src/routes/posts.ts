@@ -246,7 +246,8 @@ router.get("/stats", protectAdmin, asyncHandler(async (req: Request, res: Respon
 
     // Get total comments count (if you have a comments table)
     // For now, we'll set it to 0 since we don't have a comments table yet
-    const totalComments = 0;
+    const totalComments = await supabaseRls.select("comments", "id");
+    const totalCommentsCount = totalComments ? totalComments.length : 0;
 
     return res.status(200).json({
       success: true,
@@ -256,7 +257,7 @@ router.get("/stats", protectAdmin, asyncHandler(async (req: Request, res: Respon
         draftPosts: draftPostsCount,
         totalCategories: totalCategoriesCount,
         totalUsers: totalUsersCount,
-        totalComments: totalComments
+        totalComments: totalCommentsCount
       }
     });
   } catch (error) {
