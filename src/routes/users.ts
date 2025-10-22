@@ -166,7 +166,7 @@ router.delete('/:id', protectAdmin, async (req, res, next) => {
 });
 
 // ลบ comment ของผู้ใช้
-router.delete('/comments/:id', protectAdmin, async (req, res, next) => {
+router.delete('/:userId/comments/:id', protectAdmin, async (req, res, next) => {
   try {
     const { id } = req.params;
     const supabase = getSupabaseAdmin();
