@@ -144,12 +144,13 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
   const supabaseRls = createSupabaseRlsHelper(accessToken);
 
   try {
-    // Use RLS helper to ensure proper authentication
-    const posts = await supabaseRls.select("blog_posts", `
+    // Get total count first
+    const allPosts = await supabaseRls.select("blog_posts", `
       id,
       title,
       description,
       content,
+      status_id,
       categories(name),
       post_status(name),
       created_at,
@@ -158,17 +159,16 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
       orderBy: "created_at:desc"
     });
 
-    // Apply status filter
-    let filteredPosts = posts;
+    // Apply filters
+    let filteredPosts = allPosts;
     if (status) {
       if (status.toLowerCase() === 'published') {
-        filteredPosts = posts.filter((post: any) => post.status_id === 1);
+        filteredPosts = allPosts.filter((post: any) => post.status_id === 1);
       } else if (status.toLowerCase() === 'draft') {
-        filteredPosts = posts.filter((post: any) => post.status_id === 2);
+        filteredPosts = allPosts.filter((post: any) => post.status_id === 2);
       }
     }
 
-    // Apply keyword search
     if (keyword) {
       filteredPosts = filteredPosts.filter((post: any) => 
         post.title.toLowerCase().includes(keyword.toLowerCase()) ||
@@ -177,7 +177,7 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
       );
     }
 
-    // Transform data to match frontend expectations
+    // Transform data
     const transformedPosts = filteredPosts.map((post: any) => ({
       id: post.id,
       title: post.title,
@@ -187,7 +187,7 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
       status: post.post_status?.name?.toLowerCase() || 'unknown'
     }));
 
-    // Filter by category if needed (post-processing)
+    // Filter by category
     let finalPosts = transformedPosts;
     if (category) {
       finalPosts = transformedPosts.filter((post: any) => 
@@ -195,10 +195,22 @@ router.get("/admin", protectAdmin, asyncHandler(async (req: Request, res: Respon
       );
     }
 
+    // Apply pagination
+    const totalPosts = finalPosts.length;
+    const totalPages = Math.ceil(totalPosts / safeLimit);
+    const paginatedPosts = finalPosts.slice(offset, offset + safeLimit);
+
     return res.status(200).json({
       success: true,
-      posts: finalPosts,
-      totalPosts: finalPosts.length
+      posts: paginatedPosts,
+      pagination: {
+        currentPage: safePage,
+        totalPages: totalPages,
+        totalPosts: totalPosts,
+        limit: safeLimit,
+        hasNextPage: safePage < totalPages,
+        hasPrevPage: safePage > 1
+      }
     });
   } catch (error) {
     console.error("Admin posts route error:", error);

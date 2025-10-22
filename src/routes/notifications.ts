@@ -8,11 +8,22 @@ const router = Router();
 
 // GET /notifications - Get all notifications for admin
 router.get("/", protectAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const page = Number(req.query.page) || 1;
+  const limit = Number(req.query.limit) || 10;
   const accessToken = (req as any).accessToken;
   const supabaseAdmin = getSupabaseAdmin();
 
+  const safePage = Math.max(1, page);
+  const safeLimit = Math.max(1, Math.min(100, limit));
+  const offset = (safePage - 1) * safeLimit;
+
   try {
-    // Get notifications with related data
+    // Get total count first
+    const { count: totalCount } = await supabaseAdmin
+      .from('notifications')
+      .select('*', { count: 'exact', head: true });
+
+    // Get paginated notifications
     const { data: notifications, error } = await supabaseAdmin
       .from('notifications')
       .select(`
@@ -48,14 +59,15 @@ router.get("/", protectAdmin, asyncHandler(async (req: Request, res: Response) =
           )
         )
       `)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(offset, offset + safeLimit - 1);
 
     if (error) {
       console.error('Error fetching notifications:', error);
       throw new DatabaseError('Failed to fetch notifications');
     }
 
-    // Transform the data to match frontend expectations
+    // Transform the data
     const transformedNotifications = notifications?.map((notification: any) => {
       const user = notification.users;
       const post = notification.blog_posts || notification.comments?.blog_posts;
@@ -88,9 +100,19 @@ router.get("/", protectAdmin, asyncHandler(async (req: Request, res: Response) =
       };
     }) || [];
 
+    const totalPages = Math.ceil((totalCount || 0) / safeLimit);
+
     res.json({
       success: true,
-      data: transformedNotifications
+      data: transformedNotifications,
+      pagination: {
+        currentPage: safePage,
+        totalPages: totalPages,
+        totalNotifications: totalCount || 0,
+        limit: safeLimit,
+        hasNextPage: safePage < totalPages,
+        hasPrevPage: safePage > 1
+      }
     });
 
   } catch (error) {
