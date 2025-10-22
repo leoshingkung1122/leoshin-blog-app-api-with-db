@@ -99,6 +99,26 @@ authRouter.post("/register", async (req: Request, res: Response) => {
       if (!data.session) {
         return res.status(400).json({ error: "Failed to create session" });
       }
+
+      // ตรวจสอบสถานะ ban ของผู้ใช้
+      const supabaseUserId = data.user.id;
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("status")
+        .eq("id", supabaseUserId)
+        .single();
+
+      if (userError) {
+        console.error("Error fetching user status:", userError);
+        return res.status(500).json({ error: "An error occurred during login" });
+      }
+
+      // ตรวจสอบว่าผู้ใช้ถูกแบนหรือไม่
+      if (userData && userData.status === 'ban') {
+        return res.status(403).json({
+          error: "You have been banned by admin"
+        });
+      }
   
       return res.status(200).json({
         message: "Signed in successfully",
