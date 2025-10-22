@@ -362,7 +362,7 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
   const supabase = getSupabase();
 
   try {
-    // Query using correct table name: blog_posts with likes count
+    // Query using likes column directly from blog_posts table
     let supabaseQuery = supabase
       .from("blog_posts")
       .select(`
@@ -370,11 +370,10 @@ router.get("/", asyncHandler(async (req: Request, res: Response) => {
         categories(name),
         post_status(name),
         users!author_id(name, username, profile_pic, introduction),
-        last_editor:users!last_edited_by(name, username, profile_pic),
-        likes(count)
+        last_editor:users!last_edited_by(name, username, profile_pic)
       `)
       .eq("status_id", 1) // Published posts (status_id = 1 for Published)
-      .order("likes(count)", { ascending: false }) // เรียงตามจำนวน like จากมากไปน้อย
+      .order("likes", { ascending: false }) // เรียงตามจำนวน like จากมากไปน้อย
       .range(offset, offset + safeLimit - 1);
 
     // Apply keyword search
