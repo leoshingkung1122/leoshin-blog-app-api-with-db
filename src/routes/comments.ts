@@ -8,19 +8,49 @@ import { createNotification, getPostAuthorId } from "../utils/notificationHelper
 
 const router = Router();
 
-// GET /comments/:postId - Get all comments for a specific post
+// GET /comments/:postId - Get all comments for a specific post with pagination
 router.get("/:postId", asyncHandler(async (req: Request, res: Response) => {
   const postId = req.params.postId;
+  
+  // Parse and validate pagination parameters
+  const pageParam = req.query.page as string;
+  const limitParam = req.query.limit as string;
+  
+  const page = pageParam ? parseInt(pageParam) : 1;
+  const limit = limitParam ? parseInt(limitParam) : 5;
 
   // Validate postId parameter
   if (!postId || isNaN(Number(postId))) {
     throw new ValidationError("Invalid post ID");
   }
 
+  // Validate pagination parameters
+  if (isNaN(page) || page < 1) {
+    throw new ValidationError("Page must be a positive integer");
+  }
+  if (isNaN(limit) || limit < 1 || limit > 100) {
+    throw new ValidationError("Limit must be between 1 and 100");
+  }
+
   // Use public Supabase client for getting comments (no authentication required)
   const supabase = getSupabase();
 
   try {
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
+
+    // Get total count of comments for this post (optimized query)
+    const { count: totalCount, error: countError } = await supabase
+      .from("comments")
+      .select("*", { count: "exact", head: true })
+      .eq("post_id", postId);
+
+    if (countError) {
+      console.error("Supabase count error:", countError);
+      throw new DatabaseError(`Failed to count comments: ${countError.message}`);
+    }
+
+    // Get paginated comments with user information
     const { data: comments, error } = await supabase
       .from("comments")
       .select(`
@@ -42,16 +72,48 @@ router.get("/:postId", asyncHandler(async (req: Request, res: Response) => {
         )
       `)
       .eq("post_id", postId)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true })
+      .range(offset, offset + limit - 1);
 
     if (error) {
       console.error("Supabase error:", error);
       throw new DatabaseError(`Failed to fetch comments: ${error.message}`);
     }
 
+    // Calculate pagination metadata
+    const totalItems = totalCount || 0;
+    const totalPages = totalItems > 0 ? Math.ceil(totalItems / limit) : 1;
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+
+    // Handle case where page exceeds total pages
+    if (page > totalPages && totalPages > 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Page not found",
+        data: [],
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalItems,
+          itemsPerPage: limit,
+          hasNextPage: false,
+          hasPrevPage: page > 1
+        }
+      });
+    }
+
     return res.status(200).json({
       success: true,
-      data: comments || []
+      data: comments || [],
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalItems,
+        itemsPerPage: limit,
+        hasNextPage,
+        hasPrevPage
+      }
     });
   } catch (error) {
     console.error("Error fetching comments:", error);
