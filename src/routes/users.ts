@@ -17,10 +17,10 @@ router.get('/', protectAdmin, async (req, res, next) => {
         profile_pic,
         role,
         status,
-        created_at,
-        updated_at
+        updated_at,
+        introduction
       `)
-      .order('created_at', { ascending: false });
+      .order('updated_at', { ascending: false });
 
     if (error) throw error;
 
@@ -46,8 +46,8 @@ router.get('/:id', protectAdmin, async (req, res, next) => {
         profile_pic,
         role,
         status,
-        created_at,
-        updated_at
+        updated_at,
+        introduction
       `)
       .eq('id', id)
       .single();
