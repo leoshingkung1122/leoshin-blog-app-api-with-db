@@ -5,7 +5,7 @@ import protectAdmin from '../middleware/protectAdmin';
 const router = Router();
 
 // ดูรายการผู้ใช้ทั้งหมด
-router.get('/users', protectAdmin, async (req, res, next) => {
+router.get('/', protectAdmin, async (req, res, next) => {
   try {
     const supabase = getSupabaseAdmin();
     const { data: users, error } = await supabase
@@ -16,6 +16,7 @@ router.get('/users', protectAdmin, async (req, res, next) => {
         username,
         name,
         profile_pic,
+        role,
         status,
         created_at,
         updated_at
@@ -31,7 +32,7 @@ router.get('/users', protectAdmin, async (req, res, next) => {
 });
 
 // ดูรายละเอียดผู้ใช้พร้อมกิจกรรม
-router.get('/users/:id', protectAdmin, async (req, res, next) => {
+router.get('/:id', protectAdmin, async (req, res, next) => {
   try {
     const { id } = req.params;
     const supabase = getSupabaseAdmin();
@@ -45,6 +46,7 @@ router.get('/users/:id', protectAdmin, async (req, res, next) => {
         username,
         name,
         profile_pic,
+        role,
         status,
         created_at,
         updated_at
@@ -97,7 +99,7 @@ router.get('/users/:id', protectAdmin, async (req, res, next) => {
 });
 
 // อัปเดตสถานะผู้ใช้ (ban/unban)
-router.patch('/users/:id/status', protectAdmin, async (req, res, next) => {
+router.patch('/:id/status', protectAdmin, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -131,7 +133,7 @@ router.patch('/users/:id/status', protectAdmin, async (req, res, next) => {
 });
 
 // ลบผู้ใช้
-router.delete('/users/:id', protectAdmin, async (req, res, next) => {
+router.delete('/:id', protectAdmin, async (req, res, next) => {
   try {
     const { id } = req.params;
     const supabase = getSupabaseAdmin();
