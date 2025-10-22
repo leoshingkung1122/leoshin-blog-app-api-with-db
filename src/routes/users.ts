@@ -12,7 +12,6 @@ router.get('/', protectAdmin, async (req, res, next) => {
       .from('users')
       .select(`
         id,
-        email,
         username,
         name,
         profile_pic,
@@ -42,7 +41,6 @@ router.get('/:id', protectAdmin, async (req, res, next) => {
       .from('users')
       .select(`
         id,
-        email,
         username,
         name,
         profile_pic,
