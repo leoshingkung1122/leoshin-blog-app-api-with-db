@@ -4,6 +4,7 @@ import { DatabaseError, NotFoundError, ValidationError } from "../utils/errors";
 import protectUser from "../middleware/protectUser";
 import { createSupabaseRlsHelper } from "../utils/supabaseRls";
 import { getSupabase } from "../utils/supabase";
+import { createNotification, getPostAuthorId } from "../utils/notificationHelper";
 
 const router = Router();
 
@@ -94,6 +95,31 @@ router.post("/", protectUser, asyncHandler(async (req: Request, res: Response) =
       comment: comment.trim(),
       image: userData.profile_pic || null
     });
+
+    // Create notification for admin when someone comments
+    try {
+      // Get admin user ID (assuming there's only one admin or we want to notify all admins)
+      const adminUsers = await supabaseRls.select("users", "id", { role: 'admin' });
+      
+      if (adminUsers && adminUsers.length > 0) {
+        // Send notification to all admin users
+        for (const admin of adminUsers) {
+          const adminData = admin as any;
+          await createNotification(
+            adminData.id,
+            "New Comment",
+            `${userData.name || userData.username} commented on post: "${comment.trim()}"`,
+            'comment',
+            Number(post_id),
+            newComment[0]?.id,
+            userId
+          );
+        }
+      }
+    } catch (notificationError) {
+      console.error('Error creating notification:', notificationError);
+      // Don't fail the comment creation if notification fails
+    }
 
     return res.status(201).json({
       success: true,

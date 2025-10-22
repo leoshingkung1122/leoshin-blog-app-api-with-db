@@ -7,6 +7,7 @@ import authRouter from "./routes/auth";
 import categoriesRouter from "./routes/categories";
 import commentsRouter from "./routes/comments";
 import likesRouter from "./routes/likes";
+import notificationsRouter from "./routes/notifications";
 
 const app = express();
 const port: number = parseInt(process.env.PORT || "4001", 10);
@@ -31,6 +32,7 @@ app.use("/auth", authRouter);
 app.use("/categories", categoriesRouter);
 app.use("/comments", commentsRouter);
 app.use("/likes", likesRouter);
+app.use("/notifications", notificationsRouter);
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);
