@@ -26,10 +26,13 @@ router.post("/:postId", protectUser, asyncHandler(async (req: Request, res: Resp
 
   try {
     // Check if post exists
-    const post = await supabaseRls.select("blog_posts", "id", { id: postId });
+    const post = await supabaseRls.select("blog_posts", "id, likes", { id: postId });
     if (!post || post.length === 0) {
       throw new NotFoundError("Post", postId);
     }
+
+    const currentPost = post[0] as any;
+    const currentLikeCount = currentPost.likes || 0;
 
     // Check if user already liked this post
     const existingLike = await supabaseRls.select("post_likes", "id", { 
@@ -48,12 +51,12 @@ router.post("/:postId", protectUser, asyncHandler(async (req: Request, res: Resp
       });
 
       // Decrement likes count in blog_posts
-      const updatedPost = await supabaseRls.update("blog_posts", {
-        likes: "GREATEST(likes - 1, 0)"
+      newLikeCount = Math.max(currentLikeCount - 1, 0);
+      await supabaseRls.update("blog_posts", {
+        likes: newLikeCount
       }, { id: postId });
 
       isLiked = false;
-      newLikeCount = updatedPost[0]?.likes || 0;
     } else {
       // User hasn't liked yet, add the like
       await supabaseRls.insert("post_likes", {
@@ -62,12 +65,12 @@ router.post("/:postId", protectUser, asyncHandler(async (req: Request, res: Resp
       });
 
       // Increment likes count in blog_posts
-      const updatedPost = await supabaseRls.update("blog_posts", {
-        likes: "likes + 1"
+      newLikeCount = currentLikeCount + 1;
+      await supabaseRls.update("blog_posts", {
+        likes: newLikeCount
       }, { id: postId });
 
       isLiked = true;
-      newLikeCount = updatedPost[0]?.likes || 0;
     }
 
     return res.status(200).json({
