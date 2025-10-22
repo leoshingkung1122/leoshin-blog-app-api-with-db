@@ -8,6 +8,7 @@ import categoriesRouter from "./routes/categories";
 import commentsRouter from "./routes/comments";
 import likesRouter from "./routes/likes";
 import notificationsRouter from "./routes/notifications";
+import usersRouter from "./routes/users";
 
 const app = express();
 const port: number = parseInt(process.env.PORT || "4001", 10);
@@ -33,6 +34,7 @@ app.use("/categories", categoriesRouter);
 app.use("/comments", commentsRouter);
 app.use("/likes", likesRouter);
 app.use("/notifications", notificationsRouter);
+app.use("/users", usersRouter);
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);
