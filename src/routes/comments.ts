@@ -98,26 +98,32 @@ router.post("/", protectUser, asyncHandler(async (req: Request, res: Response) =
 
     // Create notification for admin when someone comments
     try {
-      // Get admin user ID (assuming there's only one admin or we want to notify all admins)
+      console.log('🔔 Starting notification creation for comment...');
+      
+      // Get first admin user ID (just one notification for all admins)
       const adminUsers = await supabaseRls.select("users", "id", { role: 'admin' });
+      console.log('👥 Found admin users:', adminUsers);
       
       if (adminUsers && adminUsers.length > 0) {
-        // Send notification to all admin users
-        for (const admin of adminUsers) {
-          const adminData = admin as any;
-          await createNotification(
-            adminData.id,
-            "New Comment",
-            `${userData.name || userData.username} commented on post: "${comment.trim()}"`,
-            'comment',
-            Number(post_id),
-            newComment[0]?.id,
-            userId
-          );
-        }
+        const firstAdmin = adminUsers[0] as any;
+        console.log('📤 Sending notification to admin:', firstAdmin.id);
+        
+        const notificationResult = await createNotification(
+          firstAdmin.id,
+          "New Comment",
+          `${userData.name || userData.username} commented on post: "${comment.trim()}"`,
+          'comment',
+          Number(post_id),
+          newComment[0]?.id,
+          userId
+        );
+        
+        console.log('📬 Notification result:', notificationResult);
+      } else {
+        console.log('⚠️ No admin users found');
       }
     } catch (notificationError) {
-      console.error('Error creating notification:', notificationError);
+      console.error('❌ Error creating notification:', notificationError);
       // Don't fail the comment creation if notification fails
     }
 

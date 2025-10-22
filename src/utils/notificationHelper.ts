@@ -1,4 +1,4 @@
-import { getSupabase } from "./supabase";
+import { getSupabaseAdmin } from "./supabase";
 
 // Helper function to create notification
 export async function createNotification(
@@ -10,9 +10,19 @@ export async function createNotification(
   relatedCommentId?: number,
   relatedUserId?: string
 ) {
-  const supabase = getSupabase();
+  const supabase = getSupabaseAdmin();
   
   try {
+    console.log('🔔 Creating notification:', {
+      userId,
+      title,
+      message,
+      type,
+      relatedPostId,
+      relatedCommentId,
+      relatedUserId
+    });
+
     const { data, error } = await supabase
       .from('notifications')
       .insert({
@@ -30,20 +40,21 @@ export async function createNotification(
       .single();
 
     if (error) {
-      console.error('Error creating notification:', error);
+      console.error('❌ Error creating notification:', error);
       return null;
     }
 
+    console.log('✅ Notification created successfully:', data);
     return data;
   } catch (error) {
-    console.error('Error in createNotification:', error);
+    console.error('❌ Error in createNotification:', error);
     return null;
   }
 }
 
 // Helper function to get post author ID
 export async function getPostAuthorId(postId: number): Promise<string | null> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseAdmin();
   
   try {
     const { data, error } = await supabase

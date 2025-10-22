@@ -75,32 +75,41 @@ router.post("/:postId", protectUser, asyncHandler(async (req: Request, res: Resp
 
       // Create notification for admin when someone likes a post
       try {
-        // Get admin user ID (assuming there's only one admin or we want to notify all admins)
+        console.log('🔔 Starting notification creation for like...');
+        
+        // Get first admin user ID (just one notification for all admins)
         const adminUsers = await supabaseRls.select("users", "id", { role: 'admin' });
+        console.log('👥 Found admin users:', adminUsers);
         
         if (adminUsers && adminUsers.length > 0) {
           // Get user info for the notification
           const user = await supabaseRls.select("users", "name, username", { id: userId });
           const userData = user && user.length > 0 ? user[0] as any : null;
+          console.log('👤 User data for notification:', userData);
           
           if (userData) {
-            // Send notification to all admin users
-            for (const admin of adminUsers) {
-              const adminData = admin as any;
-              await createNotification(
-                adminData.id,
-                "New Like",
-                `${userData.name || userData.username} liked a post`,
-                'like',
-                Number(postId),
-                undefined,
-                userId
-              );
-            }
+            const firstAdmin = adminUsers[0] as any;
+            console.log('📤 Sending notification to admin:', firstAdmin.id);
+            
+            const notificationResult = await createNotification(
+              firstAdmin.id,
+              "New Like",
+              `${userData.name || userData.username} liked a post`,
+              'like',
+              Number(postId),
+              undefined,
+              userId
+            );
+            
+            console.log('📬 Notification result:', notificationResult);
+          } else {
+            console.log('⚠️ No user data found for notification');
           }
+        } else {
+          console.log('⚠️ No admin users found');
         }
       } catch (notificationError) {
-        console.error('Error creating like notification:', notificationError);
+        console.error('❌ Error creating like notification:', notificationError);
         // Don't fail the like operation if notification fails
       }
     }
