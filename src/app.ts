@@ -14,7 +14,7 @@ const app = express();
 const port: number = parseInt(process.env.PORT || "4001", 10);
 
 app.use(cors({
-  origin: ['https://leo-shin-blog-app.vercel.app/', 'http://localhost:5173', 'http://localhost:3000'],
+  origin: ['https://leo-shin-blog-app.vercel.app', 'http://localhost:5173', 'http://localhost:3000'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true
 }));
