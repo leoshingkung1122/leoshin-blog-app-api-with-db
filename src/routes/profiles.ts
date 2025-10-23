@@ -129,7 +129,8 @@ router.post("/upload-image", protectUser, upload.single('image'), asyncHandler(a
     try {
         const supabaseRls = createSupabaseRlsHelper(accessToken);
         const bucketName = "profile-images";
-        const fileName = `profile-${Date.now()}-${file.originalname}`;
+        const safeOriginalName = file.originalname.replace(/[^a-zA-Z0-9-._]/g, '_');
+        const fileName = `profile-${Date.now()}-${safeOriginalName}`;
         const filePath = `public/${fileName}`;
 
         // Upload file to Supabase Storage
